@@ -183,8 +183,10 @@ class ResidualAttentionBlock(nn.Module):
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
+        # input shape of [batchsize, seq_len, d_model]
         x = x + self.attention(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
+        # output shape of [batchsize, seq_len, d_model]
         return x
 
 
@@ -196,11 +198,19 @@ class Transformer(nn.Module):
         self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor):
+        # input shape of [batch size, seq_len, width]
         return self.resblocks(x)
+        # output shape of [batch size, seq_len, width]
 
 
 class VisionTransformer(nn.Module):
     def __init__(self, input_resolution: int, patch_size: int, width: int, layers: int, heads: int, output_dim: int):
+        '''
+        width : transformer output dim
+        layers : n_layers of transformer
+        heads : n_attention heads
+        output_dim : dim of multimodal embedding
+        '''
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
@@ -217,7 +227,7 @@ class VisionTransformer(nn.Module):
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
     def forward(self, x: torch.Tensor):
-        x = self.conv1(x)  # shape = [*, width, grid, grid]
+        x = self.conv1(x)  # shape = [batch_size, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
@@ -228,11 +238,11 @@ class VisionTransformer(nn.Module):
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
 
-        x = self.ln_post(x[:, 0, :])
-
+        x = self.ln_post(x[:, :, :])
+        # shape = [batch_size, grid **2, width]
         if self.proj is not None:
             x = x @ self.proj
-
+        # shape = [batch_size, grid**2, output_dim]
         return x
 
 
@@ -335,6 +345,7 @@ class CLIP(nn.Module):
 
     def encode_image(self, image):
         return self.visual(image.type(self.dtype))
+        # shape = [batch size, grid**2, embed_dim]
 
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
@@ -346,9 +357,8 @@ class CLIP(nn.Module):
         x = self.ln_final(x).type(self.dtype)
 
         # x.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
-
+        x = x @ self.text_projection
+        # shape = [batch_size, n_ctx, embed_dim]
         return x
 
     def forward(self, image, text):
@@ -430,3 +440,4 @@ def build_model(state_dict: dict):
     convert_weights(model)
     model.load_state_dict(state_dict)
     return model.eval()
+

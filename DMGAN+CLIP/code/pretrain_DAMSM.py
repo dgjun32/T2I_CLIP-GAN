@@ -8,9 +8,7 @@ from miscc.config import cfg, cfg_from_file
 from datasets import TextDataset
 from datasets import prepare_data
 
-# pretrained CLIP
-from clip.model import CLIP
-from clip.model import build_model
+from model import RNN_ENCODER, CNN_ENCODER
 
 import os
 import sys
@@ -60,7 +58,7 @@ def parse_args():
     return args
 
 
-def train(dataloader, clip, batch_size,
+def train(dataloader, cnn_model, rnn_model, batch_size,
           labels, optimizer, epoch, ixtoword, image_dir, criterion):
     cnn_model.train()
     rnn_model.train()
@@ -74,7 +72,8 @@ def train(dataloader, clip, batch_size,
 
     for step, data in enumerate(dataloader, 0):
         # print('step', step)
-        clip.zero_grad()
+        rnn_model.zero_grad()
+        cnn_model.zero_grad()
 
         # imgs, captions, cap_lens, \
         #     class_ids, keys = prepare_data(data)
