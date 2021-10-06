@@ -64,8 +64,8 @@ def sent_loss(cnn_code, rnn_code, labels, class_ids,
 def words_loss(img_features, words_emb, labels,
                cap_lens, class_ids, batch_size):
     """
-        words_emb(query): batch x nef x seq_len
-        img_features(context): batch x nef x 17 x 17
+        words_emb(query): batch x embed_dim x seq_len
+        img_features(context): batch x embed_dim x 17 x 17
     """
     masks = []
     att_maps = []

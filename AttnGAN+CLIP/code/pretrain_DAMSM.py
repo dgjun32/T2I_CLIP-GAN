@@ -11,6 +11,7 @@ from datasets import prepare_data
 # pretrained CLIP
 from clip.model import CLIP
 from clip.model import build_model
+from clip import clip_api
 
 import os
 import sys
@@ -62,8 +63,7 @@ def parse_args():
 
 def train(dataloader, clip, batch_size,
           labels, optimizer, epoch, ixtoword, image_dir, criterion):
-    cnn_model.train()
-    rnn_model.train()
+    clip.train()
     s_total_loss0 = 0
     s_total_loss1 = 0
     w_total_loss0 = 0
@@ -82,27 +82,24 @@ def train(dataloader, clip, batch_size,
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
         sort_ind, sort_ind_2 = prepare_data(data)
 
+        # natural language caption to token
 
-        # words_features: batch_size x nef x 17 x 17
-        # sent_code: batch_size x nef
-        words_features, sent_code = cnn_model(imgs[-1])
-        words_features_2, sent_code_2 = cnn_model(imgs_2[-1])
+        sent_code, subr_feature, sent_emb, words_emb = clip(imgs, captions)
+        sent_code_1, subr_feature_2, sent_emb_2, words_emb_2 = clip(imgs_2, captions_2)
+        
+        # tensor size
+        nef = subr_feature.shape[2]
+        att_sze = torch.sqrt(subr_feature.shape[1] - 1)
+        seq_len = words_emb.shape[1]
+        batch_size = word_emb.shape[0]
 
-        # --> batch_size x nef x 17*17
-        nef, att_sze = words_features.size(1), words_features.size(2)
-        # nef_2, att_sze_2 = words_features_2.size(1), words_features_2.size(2)
-
-
-        # words_features = words_features.view(batch_size, nef, -1)
-
-        hidden = rnn_model.init_hidden(batch_size)
-        # words_emb: batch_size x nef x seq_len
-        # sent_emb: batch_size x nef
-        words_emb, sent_emb = rnn_model(captions, cap_lens, hidden)
-
-        words_emb_2, sent_emb_2 = rnn_model(captions_2, cap_lens_2, hidden)
-
-
+        # transform tensors
+        word_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
+        word_emb = word_emb.permute(0,2,1)
+        word_emb_2 = word_emb_2.permute(0,2,1)
+        
+        # compute loss
+        ## word - subregion level attention loss
         w_loss0, w_loss1, attn_maps = words_loss(words_features, words_emb, labels,
                                                  cap_lens, class_ids, batch_size)
         w_total_loss0 += w_loss0.data
@@ -115,7 +112,7 @@ def train(dataloader, clip, batch_size,
         w_total_loss1 += w2_loss1.data
         loss += w2_loss0 + w2_loss1
 
-
+        ## sentence - image level attention loss
         s_loss0, s_loss1 = \
             sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
         loss += s_loss0 + s_loss1

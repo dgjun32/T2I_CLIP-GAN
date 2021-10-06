@@ -8,7 +8,7 @@ WORKERS: 1
 
 TREE:
     BRANCH_NUM: 1
-    BASE_SIZE: 299
+    BASE_SIZE: 224
 
 
 TRAIN:

@@ -126,14 +126,17 @@ def get_imgs(img_path, imsize, bbox=None,
 
 class TextDataset(data.Dataset):
     def __init__(self, data_dir, split='train',
-                 base_size=64,
-                 transform=None, target_transform=None):
+                 base_size=64, 
+                 transform=None,
+                 target_transform=None,
+                 tokenizer):
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
         self.target_transform = target_transform
         self.embeddings_num = cfg.TEXT.CAPTIONS_PER_IMAGE
+        self.tokenizer = tokenizer
 
         self.imsize = []
         for i in range(cfg.TREE.BRANCH_NUM):
@@ -284,6 +287,7 @@ class TextDataset(data.Dataset):
         else:  # split=='test'
             captions = test_captions
             filenames = test_names
+        self.ixtoword = ixtoword
         return filenames, captions, ixtoword, wordtoix, n_words
 
     def load_class_id(self, data_dir, total_num):
@@ -310,20 +314,15 @@ class TextDataset(data.Dataset):
         sent_caption = np.asarray(self.captions[sent_ix]).astype('int64')
         if (sent_caption == 0).sum() > 0:
             print('ERROR: do not need END (0) token', sent_caption)
-        num_words = len(sent_caption)
-        # pad with 0s (i.e., '<end>')
-        x = np.zeros((cfg.TEXT.WORDS_NUM, 1), dtype='int64')
-        x_len = num_words
-        if num_words <= cfg.TEXT.WORDS_NUM:
-            x[:num_words, 0] = sent_caption
-        else:
-            ix = list(np.arange(num_words))  # 1, 2, 3,..., maxNum
-            np.random.shuffle(ix)
-            ix = ix[:cfg.TEXT.WORDS_NUM]
-            ix = np.sort(ix)
-            x[:, 0] = sent_caption[ix]
-            x_len = cfg.TEXT.WORDS_NUM
-        return x, x_len
+        
+        def _ixtoword(ix):
+            return self.ixtoword[ix]
+        
+        text_caption = " ".join(list(map(_ixtoword, sent_caption)))
+        caption = self.tokenizer(text_caption)
+        x_len = (caption!=0).sum()
+
+        return caption, x_len
 
     def __getitem__(self, index):
         #
@@ -359,6 +358,7 @@ class TextDataset(data.Dataset):
         
         
         return imgs, caps, cap_len, cls_id, key, caps_two, cap_len_two
+        # caps, caps_two are natural language text caption
 
 
 

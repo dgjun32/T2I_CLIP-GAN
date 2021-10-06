@@ -239,11 +239,14 @@ class VisionTransformer(nn.Module):
         x = x.permute(1, 0, 2)  # LND -> NLD
 
         x = self.ln_post(x[:, :, :])
+        x_vec = self.ln_post(x[:, 0, :])
         # shape = [batch_size, grid **2, width]
         if self.proj is not None:
+            x_vec = x_vec @ self.proj
+            # shape = [batch_size, output_dim]
             x = x @ self.proj
-        # shape = [batch_size, grid**2, output_dim]
-        return x
+            # shape = [batch_size, grid**2, output_dim]
+        return x, x_vec
 
 
 class CLIP(nn.Module):
@@ -355,27 +358,26 @@ class CLIP(nn.Module):
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = self.ln_final(x).type(self.dtype)
-
         # x.shape = [batch_size, n_ctx, transformer.width]
+
+        x_vec = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
+        # shape = [batch_size, embed_dim]
         x = x @ self.text_projection
         # shape = [batch_size, n_ctx, embed_dim]
-        return x
+        return x, x_vec
 
     def forward(self, image, text):
-        image_features = self.encode_image(image)
-        text_features = self.encode_text(text)
+        subregion_features, image_features = self.encode_image(image)
+        word_features, text_features = self.encode_text(text)
 
         # normalized features
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
-        # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_image = logit_scale * image_features @ text_features.t()
-        logits_per_text = logits_per_image.t()
+        subregion_features = subregion_features / subregion_features.norm(dim=-1, keepdim = True)
+        word_features = word_features / word_features.norm(dim=-1, keepdim=True)
 
-        # shape = [global_batch_size, global_batch_size]
-        return logits_per_image, logits_per_text
+        return image_features, subregion_features, text_features, word_features
 
 
 def convert_weights(model: nn.Module):
