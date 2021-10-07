@@ -8,11 +8,6 @@ from miscc.config import cfg, cfg_from_file
 from datasets import TextDataset
 from datasets import prepare_data
 
-# pretrained CLIP
-from clip.model import CLIP
-from clip.model import build_model
-from clip import clip_api
-
 import os
 import sys
 import time
@@ -34,10 +29,10 @@ import torchvision.transforms as transforms
 from masks import mask_correlated_samples_2
 from nt_xent import NT_Xent
 
-
-dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
-sys.path.append(dir_path)
-
+# pretrained CLIP
+from clip.model import CLIP
+from clip.model import build_clip
+from clip.clip_api import tokenize
 
 UPDATE_INTERVAL = 50
 
@@ -232,8 +227,9 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size, criterion):
 
 def build_models():
     # build model ############################################################
-    text_encoder = RNN_ENCODER(dataset.n_words, nhidden=cfg.TEXT.EMBEDDING_DIM)
-    image_encoder = CNN_ENCODER(cfg.TEXT.EMBEDDING_DIM)
+    
+    clip = CLIP()
+
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
     if cfg.TRAIN.NET_E != '':
@@ -256,7 +252,7 @@ def build_models():
         image_encoder = image_encoder.cuda()
         labels = labels.cuda()
 
-    return text_encoder, image_encoder, labels, start_epoch
+    return clip, labels, start_epoch
 
 
 if __name__ == "__main__":
@@ -307,7 +303,8 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip()])
     dataset = TextDataset(cfg.DATA_DIR, 'train',
                           base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform)
+                          transform=image_transform,
+                          tokenizer=tokenize)
 
     print(dataset.n_words, dataset.embeddings_num)
     assert dataset
@@ -324,11 +321,9 @@ if __name__ == "__main__":
         shuffle=True, num_workers=int(cfg.WORKERS))
 
     # Train ##############################################################
-    text_encoder, image_encoder, labels, start_epoch = build_models()
-    para = list(text_encoder.parameters())
-    for v in image_encoder.parameters():
-        if v.requires_grad:
-            para.append(v)
+    clip, labels, start_epoch = build_models()
+    para = list(clip.parameters())
+
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
     mask = mask_correlated_samples_2(batch_size)
@@ -348,8 +343,7 @@ if __name__ == "__main__":
                           dataset.ixtoword, image_dir, criterion)
             print('-' * 89)
             if len(dataloader_val) > 0:
-                s_loss, w_loss = evaluate(dataloader_val, image_encoder,
-                                          text_encoder, batch_size, criterion)
+                s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion)
                 print('| end epoch {:3d} | valid loss '
                       '{:5.2f} {:5.2f} | lr {:.5f}|'
                       .format(epoch, s_loss, w_loss, lr))
@@ -359,10 +353,8 @@ if __name__ == "__main__":
 
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
-                torch.save(image_encoder.state_dict(),
-                           '%s/image_encoder%d.pth' % (model_dir, epoch))
-                torch.save(text_encoder.state_dict(),
-                           '%s/text_encoder%d.pth' % (model_dir, epoch))
+                torch.save(clip.state_dict(),
+                           '%s/clip%d.pth' % (model_dir, epoch))
                 print('Save G/Ds models.')
     except KeyboardInterrupt:
         print('-' * 89)
