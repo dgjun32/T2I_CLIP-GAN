@@ -50,6 +50,7 @@ def parse_args():
                         help='optional config file',
                         default='cfg/DAMSM/bird.yml', type=str)
     parser.add_argument('--gpu', dest='gpu_id', type=int, default=0)
+    parser.add_argument('--clip_cfg', dest = 'clip_cfg', type=str)
     parser.add_argument('--data_dir', dest='data_dir', type=str, default='')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
     args = parser.parse_args()
@@ -77,8 +78,8 @@ def train(dataloader, clip, batch_size,
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
         sort_ind, sort_ind_2 = prepare_data(data)
 
-        # natural language caption to token
-
+        
+        # extract image and text features
         sent_code, subr_feature, sent_emb, words_emb = clip(imgs, captions)
         sent_code_1, subr_feature_2, sent_emb_2, words_emb_2 = clip(imgs_2, captions_2)
         
@@ -89,7 +90,8 @@ def train(dataloader, clip, batch_size,
         batch_size = word_emb.shape[0]
 
         # transform tensors
-        word_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
+        words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
+        words_features_2 = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
         word_emb = word_emb.permute(0,2,1)
         word_emb_2 = word_emb_2.permute(0,2,1)
         
@@ -189,7 +191,7 @@ def train(dataloader, clip, batch_size,
     return count
 
 
-def evaluate(dataloader, cnn_model, rnn_model, batch_size, criterion):
+def evaluate(dataloader, clip, batch_size, criterion):
     cnn_model.eval()
     rnn_model.eval()
     s_total_loss = 0
@@ -201,20 +203,28 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size, criterion):
         real_imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
         sort_ind, sort_ind_2 = prepare_data(data)
 
-        words_features, sent_code = cnn_model(real_imgs[-1])
-        # nef = words_features.size(1)
-        # words_features = words_features.view(batch_size, nef, -1)
+        with torch.no_grad():
+            # extract image and text features
+            sent_code, subr_feature, sent_emb, words_emb = clip(imgs, captions)
+            
+            # tensor size
+            nef = subr_feature.shape[2]
+            att_sze = torch.sqrt(subr_feature.shape[1] - 1)
+            seq_len = words_emb.shape[1]
+            batch_size = word_emb.shape[0]
 
-        hidden = rnn_model.init_hidden(batch_size)
-        words_emb, sent_emb = rnn_model(captions, cap_lens, hidden)
+            # transform tensors
+            words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
+            word_emb = word_emb.permute(0,2,1)
 
-        w_loss0, w_loss1, attn = words_loss(words_features, words_emb, labels,
-                                            cap_lens, class_ids, batch_size)
-        w_total_loss += (w_loss0 + w_loss1).data
+            # calculate loss
+            w_loss0, w_loss1, attn = words_loss(words_features, words_emb, labels,
+                                                cap_lens, class_ids, batch_size)
+            w_total_loss += (w_loss0 + w_loss1).data
 
-        s_loss0, s_loss1 = \
-            sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
-        s_total_loss += (s_loss0 + s_loss1).data
+            s_loss0, s_loss1 = \
+                sent_loss(sent_code, sent_emb, labels, class_ids, batch_size)
+            s_total_loss += (s_loss0 + s_loss1).data
 
         if step == 50:
             break
@@ -225,31 +235,16 @@ def evaluate(dataloader, cnn_model, rnn_model, batch_size, criterion):
     return s_cur_loss, w_cur_loss
 
 
-def build_models():
+def build_models(state_dict):
     # build model ############################################################
     
-    clip = CLIP()
+    clip = build_clip(state_dict)
 
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
-    if cfg.TRAIN.NET_E != '':
-        state_dict = torch.load(cfg.TRAIN.NET_E)
-        text_encoder.load_state_dict(state_dict)
-        print('Load ', cfg.TRAIN.NET_E)
-        #
-        name = cfg.TRAIN.NET_E.replace('text_encoder', 'image_encoder')
-        state_dict = torch.load(name)
-        image_encoder.load_state_dict(state_dict)
-        print('Load ', name)
-
-        istart = cfg.TRAIN.NET_E.rfind('_') + 8
-        iend = cfg.TRAIN.NET_E.rfind('.')
-        start_epoch = cfg.TRAIN.NET_E[istart:iend]
-        start_epoch = int(start_epoch) + 1
-        print('start_epoch', start_epoch)
+    print('start_epoch', start_epoch)
     if cfg.CUDA:
-        text_encoder = text_encoder.cuda()
-        image_encoder = image_encoder.cuda()
+        clip = clip.cuda()
         labels = labels.cuda()
 
     return clip, labels, start_epoch
@@ -320,10 +315,13 @@ if __name__ == "__main__":
         dataset_val, batch_size=batch_size, drop_last=True,
         shuffle=True, num_workers=int(cfg.WORKERS))
 
-    # Train ##############################################################
-    clip, labels, start_epoch = build_models()
+    # Build model ##############################################################
+    cfg.PRETRAIN_DIR = '../pretrained_clip/{}'.format(args.clip_cfg)
+    state_dict = torch.load(cfg.PRETRAIN_DIR)
+    clip, labels, start_epoch = build_models(state_dict)
     para = list(clip.parameters())
 
+    # Train ##############################################################
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
     mask = mask_correlated_samples_2(batch_size)

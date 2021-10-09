@@ -1,7 +1,7 @@
 CONFIG_NAME: 'DAMSM'
 
 DATASET_NAME: 'birds'
-DATA_DIR: '/home/hye/Desktop/yh/text_to_image/AttnGAN_py27/data/birds'
+DATA_DIR: '../data/birds'
 GPU_ID: 0
 WORKERS: 1
 
@@ -13,7 +13,7 @@ TREE:
 
 TRAIN:
     FLAG: True
-    NET_E: ''  # '../DAMSMencoders/bird/text_encoder200.pth'
+    NET_E: '' 
     BATCH_SIZE: 48
     MAX_EPOCH: 600
     SNAPSHOT_INTERVAL: 50

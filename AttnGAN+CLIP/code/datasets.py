@@ -133,7 +133,8 @@ class TextDataset(data.Dataset):
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+            transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),
+                                 std=(0.26862954, 0.26130258, 0.27577711))])
         self.target_transform = target_transform
         self.embeddings_num = cfg.TEXT.CAPTIONS_PER_IMAGE
         self.tokenizer = tokenizer
