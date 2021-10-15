@@ -16,7 +16,7 @@ __C.DATA_DIR = ''
 __C.GPU_ID = 0
 __C.CUDA = True
 __C.WORKERS = 6
-__C.PRETRAIN_DIR = '../pretrained_clip/clip.pth'
+__C.PRETRAIN_DIR = '../pretrained_clip/clip_ViT-B-32.pth'
 
 __C.RNN_TYPE = 'LSTM'   # 'GRU'
 __C.B_VALIDATION = False

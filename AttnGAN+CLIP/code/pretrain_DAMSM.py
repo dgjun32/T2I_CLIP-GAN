@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import random
+import math
 import pprint
 import datetime
 import dateutil.tz
@@ -69,6 +70,8 @@ def train(dataloader, clip, batch_size,
 
 
     for step, data in enumerate(dataloader, 0):
+        # data : imgs = [image tensor], caps, caps_len, cls_id, key, caps_2, caps_len_2
+
         # print('step', step)
         clip.zero_grad()
 
@@ -76,24 +79,24 @@ def train(dataloader, clip, batch_size,
         #     class_ids, keys = prepare_data(data)
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-        sort_ind, sort_ind_2 = prepare_data(data)
+        sort_ind, sort_ind_2 = prepare_data(data) # data.cuda()
 
         
         # extract image and text features
-        sent_code, subr_feature, sent_emb, words_emb = clip(imgs, captions)
-        sent_code_1, subr_feature_2, sent_emb_2, words_emb_2 = clip(imgs_2, captions_2)
+        sent_code, subr_feature, sent_emb, words_emb = clip(imgs[0], captions)
+        sent_code_2, subr_feature_2, sent_emb_2, words_emb_2 = clip(imgs_2[0], captions_2)
         
         # tensor size
         nef = subr_feature.shape[2]
-        att_sze = torch.sqrt(subr_feature.shape[1] - 1)
+        att_sze = int(math.sqrt(subr_feature.shape[1] - 1))
         seq_len = words_emb.shape[1]
-        batch_size = word_emb.shape[0]
+        batch_size = words_emb.shape[0]
 
         # transform tensors
         words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
         words_features_2 = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
-        word_emb = word_emb.permute(0,2,1)
-        word_emb_2 = word_emb_2.permute(0,2,1)
+        words_emb = words_emb.permute(0,2,1)
+        words_emb_2 = words_emb_2.permute(0,2,1)
         
         # compute loss
         ## word - subregion level attention loss
@@ -154,8 +157,6 @@ def train(dataloader, clip, batch_size,
         #
         # `clip_grad_norm` helps prevent
         # the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm(rnn_model.parameters(),
-                                      cfg.TRAIN.RNN_GRAD_CLIP)
         optimizer.step()
 
         if step % UPDATE_INTERVAL == 0:
@@ -192,8 +193,7 @@ def train(dataloader, clip, batch_size,
 
 
 def evaluate(dataloader, clip, batch_size, criterion):
-    cnn_model.eval()
-    rnn_model.eval()
+    clip.eval()
     s_total_loss = 0
     w_total_loss = 0
     for step, data in enumerate(dataloader, 0):
@@ -298,8 +298,7 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip()])
     dataset = TextDataset(cfg.DATA_DIR, 'train',
                           base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform,
-                          tokenizer=tokenize)
+                          transform=image_transform)
 
     print(dataset.n_words, dataset.embeddings_num)
     assert dataset
@@ -336,7 +335,7 @@ if __name__ == "__main__":
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             optimizer = optim.Adam(para, lr=lr, betas=(0.5, 0.999))
             epoch_start_time = time.time()
-            count = train(dataloader, image_encoder, text_encoder,
+            count = train(dataloader, clip,
                           batch_size, labels, optimizer, epoch,
                           dataset.ixtoword, image_dir, criterion)
             print('-' * 89)

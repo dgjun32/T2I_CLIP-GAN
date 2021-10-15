@@ -4,7 +4,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 
-from nltk.tokenize import RegexpTokenizer
+from clip.clip_api import tokenize
 from collections import defaultdict
 from miscc.config import cfg
 
@@ -125,11 +125,11 @@ def get_imgs(img_path, imsize, bbox=None,
 
 
 class TextDataset(data.Dataset):
-    def __init__(self, data_dir, split='train',
+    def __init__(self, data_dir,
+                 split='train',
                  base_size=64, 
                  transform=None,
-                 target_transform=None,
-                 tokenizer):
+                 target_transform=None):
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
@@ -137,7 +137,6 @@ class TextDataset(data.Dataset):
                                  std=(0.26862954, 0.26130258, 0.27577711))])
         self.target_transform = target_transform
         self.embeddings_num = cfg.TEXT.CAPTIONS_PER_IMAGE
-        self.tokenizer = tokenizer
 
         self.imsize = []
         for i in range(cfg.TREE.BRANCH_NUM):
@@ -320,7 +319,7 @@ class TextDataset(data.Dataset):
             return self.ixtoword[ix]
         
         text_caption = " ".join(list(map(_ixtoword, sent_caption)))
-        caption = self.tokenizer(text_caption)
+        caption = tokenize(text_caption)
         x_len = (caption!=0).sum()
 
         return caption, x_len
