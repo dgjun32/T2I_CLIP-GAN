@@ -200,22 +200,22 @@ def evaluate(dataloader, clip, batch_size, criterion):
         # real_imgs, captions, cap_lens, \
         #         class_ids, keys = prepare_data(data)
 
-        real_imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
+        imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
         sort_ind, sort_ind_2 = prepare_data(data)
 
         with torch.no_grad():
             # extract image and text features
-            sent_code, subr_feature, sent_emb, words_emb = clip(imgs, captions)
+            sent_code, subr_feature, sent_emb, words_emb = clip(imgs[0], captions)
             
             # tensor size
             nef = subr_feature.shape[2]
-            att_sze = torch.sqrt(subr_feature.shape[1] - 1)
+            att_sze = int(math.sqrt(subr_feature.shape[1] - 1))
             seq_len = words_emb.shape[1]
             batch_size = word_emb.shape[0]
 
             # transform tensors
             words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
-            word_emb = word_emb.permute(0,2,1)
+            words_emb = words_emb[:,1:,:].permute(0,2,1)
 
             # calculate loss
             w_loss0, w_loss1, attn = words_loss(words_features, words_emb, labels,
@@ -239,6 +239,8 @@ def build_models(state_dict):
     # build model ############################################################
     
     clip = build_clip(state_dict)
+    for param in clip.parameters():
+        param.requires_grad = True
 
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
