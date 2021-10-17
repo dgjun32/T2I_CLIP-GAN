@@ -41,8 +41,8 @@ def sent_loss(img_code, text_code, labels, class_ids,
         text_code = text_code.unsqueeze(0)
 
     # img_code_norm / text_code_norm: seq_len x batch_size x 1
-    img_code_norm = torch.norm(img_code, 2, dim=2, keepdim=True)
-    text_code_norm = torch.norm(text_code, 2, dim=2, keepdim=True)
+    img_code_norm = torch.norm(img_code, 2, dim=2, keepdim=True).clamp(min = eps)
+    text_code_norm = torch.norm(text_code, 2, dim=2, keepdim=True).clamp(min = eps)
     # scores* / norm*: seq_len x batch_size x batch_size
     scores0 = torch.bmm(img_code, text_code.transpose(1, 2))
     norm0 = torch.bmm(img_code_norm, text_code_norm.transpose(1, 2))
@@ -62,7 +62,7 @@ def sent_loss(img_code, text_code, labels, class_ids,
 
 
 def words_loss(img_features, words_emb, labels,
-               cap_lens, class_ids, batch_size):
+               cap_lens, class_ids, batch_size, eps = 1e-8):
     """
         words_emb(query): batch x embed_dim x seq_len
         img_features(context): batch x embed_dim x 17 x 17

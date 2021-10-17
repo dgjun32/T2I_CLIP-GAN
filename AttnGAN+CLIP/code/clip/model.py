@@ -403,6 +403,26 @@ def convert_weights(model: nn.Module):
 
     model.apply(_convert_weights_to_fp16)
 
+class AddLinearOnCLIP(nn.Module):
+    def __init__(self, backbone):
+        super().__init__()
+        self.backbone = backbone
+        self.linear_img = nn.Linear(512, 512)
+        self.linear_subr = nn.Linear(512, 512)
+        self.linear_sent = nn.Linear(512, 512)
+        self.linear_word = nn.Linear(512, 512)
+    def forward(self, image, text):
+        batch_size = image.shape[0]
+        img, subr, sent, word = self.backbone(image, text)
+        img = img.float()
+        subr = subr.float()
+        sent = sent.float()
+        word = word.float()
+        img = self.linear_img(img)
+        subr = self.linear_subr(subr.view(-1, 512))
+        sent = self.linear_sent(sent)
+        word = self.linear_word(word.view(-1, 512))
+        return img, subr.view(batch_size,-1,512), sent, word.view(batch_size,-1,512)
 
 def build_clip(state_dict: dict):
     vit = "visual.proj" in state_dict
@@ -441,5 +461,11 @@ def build_clip(state_dict: dict):
 
     convert_weights(model)
     model.load_state_dict(state_dict)
-    return model.eval()
+
+    # freeze pretrained parameters
+    for param in model.parameters():
+        param.requires_grad = False
+    # add additional linear weight for finetuning text, image encoder
+    clip_model = AddLinearOnCLIP(model)
+    return clip_model.eval()
 

@@ -157,6 +157,7 @@ def train(dataloader, clip, batch_size,
         #
         # `clip_grad_norm` helps prevent
         # the exploding gradient problem in RNNs / LSTMs.
+
         optimizer.step()
 
         if step % UPDATE_INTERVAL == 0:
@@ -211,7 +212,7 @@ def evaluate(dataloader, clip, batch_size, criterion):
             nef = subr_feature.shape[2]
             att_sze = int(math.sqrt(subr_feature.shape[1] - 1))
             seq_len = words_emb.shape[1]
-            batch_size = word_emb.shape[0]
+            batch_size = words_emb.shape[0]
 
             # transform tensors
             words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
@@ -239,8 +240,6 @@ def build_models(state_dict):
     # build model ############################################################
     
     clip = build_clip(state_dict)
-    for param in clip.parameters():
-        param.requires_grad = True
 
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
@@ -280,8 +279,8 @@ if __name__ == "__main__":
     ##########################################################################
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '../output/%s_%s_%s' % \
-        (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
+    output_dir = '../output/%s_%s/' % \
+        (cfg.DATASET_NAME, cfg.CONFIG_NAME)
 
     model_dir = os.path.join(output_dir, 'Model')
     image_dir = os.path.join(output_dir, 'Image')
