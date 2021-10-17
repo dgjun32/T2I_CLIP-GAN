@@ -1,4 +1,4 @@
-CONFIG_NAME: 'DAMSM'
+CONFIG_NAME: 'CLIP_LINEAR_DAMSM'
 
 DATASET_NAME: 'birds'
 DATA_DIR: '../data/birds'
