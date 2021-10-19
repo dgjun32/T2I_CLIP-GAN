@@ -234,10 +234,11 @@ def evaluate(dataloader, clip, batch_size, criterion):
     return s_cur_loss, w_cur_loss
 
 
-def build_models(state_dict):
+def build_models():
     # build model ############################################################
     
-    clip = build_clip(state_dict)
+    backbone = transformers.ClipModel.from_pretrained('openai/clip-vit-base-patch32')
+    
 
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
