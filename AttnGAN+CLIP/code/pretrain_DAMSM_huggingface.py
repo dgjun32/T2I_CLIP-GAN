@@ -26,14 +26,10 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+import transformers
 
 from masks import mask_correlated_samples_2
 from nt_xent import NT_Xent
-
-# pretrained CLIP
-from clip.model import CLIP
-from clip.model import build_clip
-from clip.clip_api import tokenize
 
 UPDATE_INTERVAL = 50
 
