@@ -26,10 +26,14 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
-import transformers
 
 from masks import mask_correlated_samples_2
 from nt_xent import NT_Xent
+
+# pretrained CLIP
+from clip.model import CLIP
+from clip.model import build_clip
+from clip.clip_api import tokenize
 
 UPDATE_INTERVAL = 50
 
@@ -234,11 +238,10 @@ def evaluate(dataloader, clip, batch_size, criterion):
     return s_cur_loss, w_cur_loss
 
 
-def build_models():
+def build_models(state_dict):
     # build model ############################################################
     
-    backbone = transformers.ClipModel.from_pretrained('openai/clip-vit-base-patch32')
-    
+    clip = build_clip(state_dict)
 
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
@@ -307,7 +310,7 @@ if __name__ == "__main__":
         shuffle=True, num_workers=int(cfg.WORKERS))
 
     # # validation data #
-    dataset_val = TextDataset(cfg.DATA_DIR, 'test',
+    dataset_val = TextDataset(cfg.DATA_DIR, 'val',
                               base_size=cfg.TREE.BASE_SIZE,
                               transform=image_transform)
     dataloader_val = torch.utils.data.DataLoader(

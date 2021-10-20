@@ -60,7 +60,8 @@ def parse_args():
 
 def train(dataloader, clip, batch_size,
           labels, optimizer, epoch, ixtoword, image_dir, criterion):
-    clip.train()
+    img_clip.train()
+    text_clip.train()
     s_total_loss0 = 0
     s_total_loss1 = 0
     w_total_loss0 = 0
@@ -80,11 +81,18 @@ def train(dataloader, clip, batch_size,
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
         sort_ind, sort_ind_2 = prepare_data(data) # data.cuda()
-
-        
+        '''
+        imgs : list containing image tensor
+        captions : dict containig input_ids and attention_mask
+        '''
         # extract image and text features
-        sent_code, subr_feature, sent_emb, words_emb = clip(imgs[0], captions)
-        sent_code_2, subr_feature_2, sent_emb_2, words_emb_2 = clip(imgs_2[0], captions_2)
+        outputs = clip(**captions, pixel_values=imgs[0])
+        sent_code, subr_feature = outputs['image_embeds'], outputs['vision_model_output']['last_hidden_state']
+        sent_emb, words_emb = outputs['text_embeds'], outputs['text_model_output']['last_hidden_state']
+
+        outputs_2 = clip(**captions_2, pixel_values=imgs_2[0])
+        sent_code_2, subr_feature_2 = outputs_2['image_embeds'], outputs_2['vision_model_output']['last_hidden_state']
+        sent_emb_2, words_emb_2 = outputs_2['text_embeds'], outputs_2['text_model_output']['last_hidden_state']
         
         # tensor size
         nef = subr_feature.shape[2]
@@ -241,8 +249,7 @@ def evaluate(dataloader, clip, batch_size, criterion):
 def build_models(state_dict):
     # build model ############################################################
     
-    clip = build_clip(state_dict)
-
+    clip = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
     print('start_epoch', start_epoch)
@@ -320,7 +327,7 @@ if __name__ == "__main__":
     # Build model ##############################################################
     cfg.PRETRAIN_DIR = '../pretrained_clip/{}'.format(args.clip_cfg)
     state_dict = torch.load(cfg.PRETRAIN_DIR)
-    clip, labels, start_epoch = build_models(state_dict)
+    clip, labels, start_epoch = build_models()
     para = list(clip.parameters())
 
     # Train ##############################################################
