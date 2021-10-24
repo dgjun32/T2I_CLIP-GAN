@@ -159,7 +159,7 @@ def train(dataloader, clip, batch_size,
         #
         # `clip_grad_norm` helps prevent
         # the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm(clip.parameters(),
+        torch.nn.utils.clip_grad_norm_(clip.parameters(),
                                       cfg.TRAIN.RNN_GRAD_CLIP)
 
         optimizer.step()
@@ -335,8 +335,9 @@ if __name__ == "__main__":
 
     # Build model ##############################################################
     clip, labels, start_epoch, tokenizer = build_models()
-    para = list(clip.parameters())
-
+    backbone_para = list(clip.backbone.parameters())
+    linear_img_para = list(clip.linear_img.parameters())
+    linear_subr_para = list(clip.linear_subr.parameters())
     # Train ##############################################################
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
     # At any point you can hit Ctrl + C to break out of training early.
@@ -350,7 +351,11 @@ if __name__ == "__main__":
     try:
         lr = cfg.TRAIN.ENCODER_LR
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
-            optimizer = optim.Adam(para, lr=lr, betas=(0.5, 0.999))
+            optimizer = optim.Adam([
+                        {'params' : backbone_para, 'lr' : 1e-5, 'betas':(0.5, 0.999)},
+                        {'params' : linear_img_para, 'lr' : 1e-3, 'betas':(0.5, 0.999)},
+                        {'params' : linear_subr_para, 'lr' : 1e-3, 'betas':(0.5, 0.999)}
+                        ])
             epoch_start_time = time.time()
             count = train(dataloader, clip,
                           batch_size, labels, optimizer, epoch,
