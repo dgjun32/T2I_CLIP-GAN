@@ -1,4 +1,4 @@
-CONFIG_NAME: 'DAMSM'
+CONFIG_NAME: 'DAMSM_CLIP'
 
 DATASET_NAME: 'coco'
 DATA_DIR: '../data/coco'
@@ -8,7 +8,7 @@ WORKERS: 1
 
 TREE:
     BRANCH_NUM: 1
-    BASE_SIZE: 299
+    BASE_SIZE: 224
 
 
 TRAIN:

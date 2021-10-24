@@ -11,6 +11,7 @@ import torch
 import torch.utils.data as data
 from torch.autograd import Variable
 import torchvision.transforms as transforms
+import transformers
 
 import os
 import sys
@@ -24,9 +25,8 @@ else:
     import pickle
 
 
-def prepare_data(data):
-    imgs, captions, captions_lens, class_ids, keys, captions_2, captions_lens_2 = data
-
+def prepare_data(data, tokenizer):
+    imgs, text_captions, captions_lens, class_ids, keys, text_captions_2, captions_lens_2 = data
     # sort data by the length in a decreasing order
     sorted_cap_lens, sorted_cap_indices = \
         torch.sort(captions_lens, 0, True)
@@ -52,10 +52,12 @@ def prepare_data(data):
         else:
             real_imgs_2.append(Variable(imgs_2[i]))
 
-
-    captions = captions[sorted_cap_indices].squeeze()
-    
-    captions_2 = captions_2[sorted_cap_indices_2].squeeze()
+    captions = tokenizer.batch_encode_plus(text_captions, padding = True, return_tensors = 'pt')
+    captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze().cuda(),
+                'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze().cuda()}
+    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = True, return_tensors = 'pt')
+    captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze().cuda(),
+                'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze().cuda()}
     # sorted_captions_lens_2 = captions_lens_2[sorted_cap_indices].squeeze()
 
     # captions = torch.cat([captions, captions_2], dim=0)
@@ -71,10 +73,7 @@ def prepare_data(data):
     keys = [keys[i] for i in sorted_cap_indices.numpy()]
     # print('keys', type(keys), keys[-1])  # list
     if cfg.CUDA:
-        captions = Variable(captions).cuda()
         sorted_cap_lens = Variable(sorted_cap_lens).cuda()
-
-        captions_2 = Variable(captions_2).cuda()
         sorted_cap_lens_2 = Variable(sorted_cap_lens_2).cuda()
 
         sorted_cap_indices = sorted_cap_indices.cuda()
@@ -319,10 +318,9 @@ class TextDataset(data.Dataset):
             return self.ixtoword[ix]
         
         text_caption = " ".join(list(map(_ixtoword, sent_caption)))
-        caption = self.tokenizer(text_caption, padding = True, return_tensors = 'pt')
-        x_len = (caption['attention_mask'][0]!=0).sum()
+        x_len = len(sent_caption)
 
-        return caption, x_len
+        return text_caption, x_len
 
     def __getitem__(self, index):
         #
@@ -358,8 +356,8 @@ class TextDataset(data.Dataset):
         
         
         return imgs, caps, cap_len, cls_id, key, caps_two, cap_len_two
-        # caps, caps_two are natural language text caption
-
+        # caps, caps_two : natural language text caption
+        # imgs : list containing image tensor
 
 
     def get_mis_caption(self, cls_id):

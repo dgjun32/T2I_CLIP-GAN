@@ -26,6 +26,7 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+import transformers
 
 from masks import mask_correlated_samples_2
 from nt_xent import NT_Xent
@@ -51,7 +52,6 @@ def parse_args():
                         help='optional config file',
                         default='cfg/DAMSM/bird.yml', type=str)
     parser.add_argument('--gpu', dest='gpu_id', type=int, default=0)
-    parser.add_argument('--clip_cfg', dest = 'clip_cfg', type=str)
     parser.add_argument('--data_dir', dest='data_dir', type=str, default='')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
     args = parser.parse_args()
@@ -59,16 +59,15 @@ def parse_args():
 
 
 def train(dataloader, clip, batch_size,
-          labels, optimizer, epoch, ixtoword, image_dir, criterion):
-    img_clip.train()
-    text_clip.train()
+          labels, optimizer, epoch, ixtoword, image_dir, criterion, tokenizer):
+    clip.train()
     s_total_loss0 = 0
     s_total_loss1 = 0
     w_total_loss0 = 0
     w_total_loss1 = 0
     count = (epoch + 1) * len(dataloader)
     start_time = time.time()
-
+    
 
     for step, data in enumerate(dataloader, 0):
         # data : imgs = [image tensor], caps, caps_len, cls_id, key, caps_2, caps_len_2
@@ -80,19 +79,14 @@ def train(dataloader, clip, batch_size,
         #     class_ids, keys = prepare_data(data)
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-        sort_ind, sort_ind_2 = prepare_data(data) # data.cuda()
+        sort_ind, sort_ind_2 = prepare_data(data, tokenizer) # data.cuda()
         '''
         imgs : list containing image tensor
         captions : dict containig input_ids and attention_mask
         '''
         # extract image and text features
-        outputs = clip(**captions, pixel_values=imgs[0])
-        sent_code, subr_feature = outputs['image_embeds'], outputs['vision_model_output']['last_hidden_state']
-        sent_emb, words_emb = outputs['text_embeds'], outputs['text_model_output']['last_hidden_state']
-
-        outputs_2 = clip(**captions_2, pixel_values=imgs_2[0])
-        sent_code_2, subr_feature_2 = outputs_2['image_embeds'], outputs_2['vision_model_output']['last_hidden_state']
-        sent_emb_2, words_emb_2 = outputs_2['text_embeds'], outputs_2['text_model_output']['last_hidden_state']
+        sent_code, subr_feature, sent_emb, words_emb = clip(**captions, pixel_values = imgs[0])
+        sent_code_2, subr_feature_2, sent_emb_2, words_emb_2 = clip(**captions_2, pixel_values = imgs_2[0])
         
         # tensor size
         nef = subr_feature.shape[2]
@@ -245,11 +239,26 @@ def evaluate(dataloader, clip, batch_size, criterion):
 
     return s_cur_loss, w_cur_loss
 
+class AddLinearOnCLIP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.backbone = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
+        self.linear_img = nn.Linear(768, 512)
+        self.linear_subr = nn.Linear(768, 512)
+    def forward(self, pixel_values, input_ids, attention_mask):
+        batch_size = pixel_values.shape[0]
+        outputs = self.backbone(pixel_values = pixel_values, input_ids = input_ids, attention_mask = attention_mask)
+        img, subr = outputs['vision_model_output']['pooler_output'], outputs['vision_model_output']['last_hidden_state']
+        sent, words = outputs['text_model_output']['pooler_output'], outputs['text_model_output']['last_hidden_state']
+        # linear transformation for same embedding dimension -> compute word loss
+        img = self.linear_img(img)
+        subr = self.linear_subr(subr.view(-1,768)).view(batch_size,-1,512)
+        return img, subr, sent, words
 
-def build_models(state_dict):
+def build_models():
     # build model ############################################################
-    
-    clip = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
+    clip = AddLinearOnCLIP()
+    tokenizer = transformers.CLIPTokenizer.from_pretrained('openai/clip-vit-base-patch32')
     labels = Variable(torch.LongTensor(range(batch_size)))
     start_epoch = 0
     print('start_epoch', start_epoch)
@@ -257,7 +266,7 @@ def build_models(state_dict):
         clip = clip.cuda()
         labels = labels.cuda()
 
-    return clip, labels, start_epoch
+    return clip, labels, start_epoch, tokenizer
 
 
 if __name__ == "__main__":
@@ -288,7 +297,7 @@ if __name__ == "__main__":
     ##########################################################################
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '/home/coder/dongjun/CLIP+GAN/AttnGAN+CLIP/output/%s_%s/' % \
+    output_dir = '/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/%s_%s/' % \
         (cfg.DATASET_NAME, cfg.CONFIG_NAME)
 
     model_dir = os.path.join(output_dir, 'Model')
@@ -325,9 +334,7 @@ if __name__ == "__main__":
         shuffle=True, num_workers=int(cfg.WORKERS))
 
     # Build model ##############################################################
-    cfg.PRETRAIN_DIR = '../pretrained_clip/{}'.format(args.clip_cfg)
-    state_dict = torch.load(cfg.PRETRAIN_DIR)
-    clip, labels, start_epoch = build_models()
+    clip, labels, start_epoch, tokenizer = build_models()
     para = list(clip.parameters())
 
     # Train ##############################################################
@@ -347,7 +354,7 @@ if __name__ == "__main__":
             epoch_start_time = time.time()
             count = train(dataloader, clip,
                           batch_size, labels, optimizer, epoch,
-                          dataset.ixtoword, image_dir, criterion)
+                          dataset.ixtoword, image_dir, criterion, tokenizer)
             print('-' * 89)
             if len(dataloader_val) > 0:
                 s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion)
