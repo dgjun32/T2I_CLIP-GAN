@@ -197,7 +197,7 @@ def train(dataloader, clip, batch_size,
     return count
 
 
-def evaluate(dataloader, clip, batch_size, criterion):
+def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
     clip.eval()
     s_total_loss = 0
     w_total_loss = 0
@@ -206,11 +206,11 @@ def evaluate(dataloader, clip, batch_size, criterion):
         #         class_ids, keys = prepare_data(data)
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-        sort_ind, sort_ind_2 = prepare_data(data)
+        sort_ind, sort_ind_2 = prepare_data(data, tokenizer)
 
         with torch.no_grad():
             # extract image and text features
-            sent_code, subr_feature, sent_emb, words_emb = clip(imgs[0], captions)
+            sent_code, subr_feature, sent_emb, words_emb = clip(**captions, pixel_values = imgs[0])
             
             # tensor size
             nef = subr_feature.shape[2]
@@ -362,7 +362,7 @@ if __name__ == "__main__":
                           dataset.ixtoword, image_dir, criterion, tokenizer)
             print('-' * 89)
             if len(dataloader_val) > 0:
-                s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion)
+                s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion, tokenizer)
                 print('| end epoch {:3d} | valid loss '
                       '{:5.2f} {:5.2f} | lr {:.5f}|'
                       .format(epoch, s_loss, w_loss, lr))
