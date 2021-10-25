@@ -349,12 +349,13 @@ if __name__ == "__main__":
 
 
     try:
-        lr = cfg.TRAIN.ENCODER_LR
+        backbone_lr = cfg.TRAIN.BACKBONE_LR
+        linear_lr = cfg.TRAIN.LINEAR_LR
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             optimizer = optim.Adam([
-                        {'params' : backbone_para, 'lr' : 1e-5, 'betas':(0.5, 0.999)},
-                        {'params' : linear_img_para, 'lr' : 1e-3, 'betas':(0.5, 0.999)},
-                        {'params' : linear_subr_para, 'lr' : 1e-3, 'betas':(0.5, 0.999)}
+                        {'params' : backbone_para, 'lr' : backbone_lr, 'betas':(0.9, 0.98), 'eps':1e-6, 'weight_decay':0.2},
+                        {'params' : linear_img_para, 'lr' : linear_lr, 'betas':(0.5, 0.999)},
+                        {'params' : linear_subr_para, 'lr' : linear_lr, 'betas':(0.5, 0.999)}
                         ])
             epoch_start_time = time.time()
             count = train(dataloader, clip,

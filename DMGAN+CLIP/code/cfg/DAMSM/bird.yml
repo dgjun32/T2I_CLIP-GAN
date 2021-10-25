@@ -15,9 +15,10 @@ TRAIN:
     FLAG: True
     NET_E: ''  # '../DAMSMencoders/bird/text_encoder200.pth'
     BATCH_SIZE: 48
-    MAX_EPOCH: 600
-    SNAPSHOT_INTERVAL: 50
-    ENCODER_LR: 0.002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
+    MAX_EPOCH: 100
+    SNAPSHOT_INTERVAL: 10
+    BACKBONE_LR: 0.00002  # 0.0002best; 0.002good; scott: 0.0007 with 0.98decay
+    LINEAR_LR: 0.002
     RNN_GRAD_CLIP: 0.25
     SMOOTH:
         GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
