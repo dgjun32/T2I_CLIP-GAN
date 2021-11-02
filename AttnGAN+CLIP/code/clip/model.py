@@ -407,10 +407,10 @@ class AddLinearOnCLIP(nn.Module):
     def __init__(self, backbone):
         super().__init__()
         self.backbone = backbone
-        self.linear_img = nn.Linear(512, 512)
-        self.linear_subr = nn.Linear(512, 512)
-        self.linear_sent = nn.Linear(512, 512)
-        self.linear_word = nn.Linear(512, 512)
+        self.linear_img = nn.Linear(768, 512)
+        self.linear_subr = nn.Linear(768, 512)
+        self.linear_sent = nn.Linear(768, 512)
+        self.linear_word = nn.Linear(768, 512)
     def forward(self, image, text):
         batch_size = image.shape[0]
         img, subr, sent, word = self.backbone(image, text)
@@ -419,9 +419,9 @@ class AddLinearOnCLIP(nn.Module):
         sent = sent.float()
         word = word.float()
         img = self.linear_img(img)
-        subr = self.linear_subr(subr.view(-1, 512))
+        subr = self.linear_subr(subr.view(-1, 768))
         sent = self.linear_sent(sent)
-        word = self.linear_word(word.view(-1, 512))
+        word = self.linear_word(word.view(-1, 768))
         return img, subr.view(batch_size,-1,512), sent, word.view(batch_size,-1,512)
 
 def build_clip(state_dict: dict):

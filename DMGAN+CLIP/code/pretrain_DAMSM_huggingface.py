@@ -19,6 +19,7 @@ import dateutil.tz
 import argparse
 import numpy as np
 from PIL import Image
+import tensorboardX
 
 import torch
 import torch.nn as nn
@@ -36,6 +37,10 @@ from clip.model import CLIP
 from clip.model import build_clip
 from clip.clip_api import tokenize
 
+# Logger
+from tensorboardX import SummaryWriter
+
+summary = SummaryWriter()
 UPDATE_INTERVAL = 50
 
 def l2norm(X, dim, eps=1e-8):
@@ -194,7 +199,7 @@ def train(dataloader, clip, batch_size,
             #     im = Image.fromarray(img_set)
             #     fullpath = '%s/attention_maps%d.png' % (image_dir, step)
             #     im.save(fullpath)
-    return count
+    return count, loss.item()
 
 
 def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
@@ -295,8 +300,7 @@ if __name__ == "__main__":
         torch.cuda.manual_seed_all(args.manualSeed)
 
     ##########################################################################
-    now = datetime.datetime.now(dateutil.tz.tzlocal())
-    timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+
     output_dir = '/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/%s_%s/' % \
         (cfg.DATASET_NAME, cfg.CONFIG_NAME)
 
@@ -326,7 +330,7 @@ if __name__ == "__main__":
         shuffle=True, num_workers=int(cfg.WORKERS))
 
     # # validation data #
-    dataset_val = TextDataset(cfg.DATA_DIR, 'test',
+    dataset_val = TextDataset(cfg.DATA_DIR, 'val',
                               base_size=cfg.TREE.BASE_SIZE,
                               transform=image_transform)
     dataloader_val = torch.utils.data.DataLoader(
@@ -352,25 +356,26 @@ if __name__ == "__main__":
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
-            optimizer = optim.Adam([
-                        {'params' : backbone_para, 'lr' : backbone_lr, 'betas':(0.9, 0.98), 'eps':1e-6, 'weight_decay':0.2},
-                        {'params' : linear_img_para, 'lr' : linear_lr, 'betas':(0.5, 0.999)},
-                        {'params' : linear_subr_para, 'lr' : linear_lr, 'betas':(0.5, 0.999)}
+            optimizer = optim.AdamW([
+                        {'params' : backbone_para, 'lr' : backbone_lr, 'betas':(0.5, 0.999), 'eps':1e-6},
+                        {'params' : linear_img_para, 'lr' : linear_lr, 'betas':(0.5, 0.999), 'eps':1e-6},
+                        {'params' : linear_subr_para, 'lr' : linear_lr, 'betas':(0.5, 0.999), 'eps':1e-6}
                         ])
             epoch_start_time = time.time()
-            count = train(dataloader, clip,
+            count, wsc_loss = train(dataloader, clip,
                           batch_size, labels, optimizer, epoch,
                           dataset.ixtoword, image_dir, criterion, tokenizer)
             print('-' * 89)
             if len(dataloader_val) > 0:
                 s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion, tokenizer)
                 print('| end epoch {:3d} | valid loss '
-                      '{:5.2f} {:5.2f} | lr {:.5f}|'
-                      .format(epoch, s_loss, w_loss, lr))
+                      '{:5.2f} {:5.2f} | backbone_lr {:.5f}| linear_lr {:.5f}|'
+                      .format(epoch, s_loss, w_loss, backbone_lr, linear_lr))
             print('-' * 89)
-            if lr > cfg.TRAIN.ENCODER_LR/10.:
-                lr *= 0.98
-
+            # val_loss logging
+            summary.add_scalar('train_loss/wsc_loss', wsc_loss.item(), epoch)
+            summary.add_scalar('val_loss/w_loss', w_loss.item(), epoch)
+            summary.add_scalar('val_loss/s_loss', s_loss.item(), epoch)
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
                 torch.save(clip.state_dict(),
