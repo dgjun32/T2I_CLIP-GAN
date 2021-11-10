@@ -64,7 +64,7 @@ def words_loss(img_features, words_emb, labels,
                cap_lens, class_ids, batch_size):
     """
         words_emb(query): batch x nef x seq_len
-        img_features(context): batch x nef x 17 x 17
+        img_features(context): batch x nef x 7 x 7
     """
     masks = []
     att_maps = []
@@ -81,13 +81,13 @@ def words_loss(img_features, words_emb, labels,
         word = words_emb[i, :, :words_num].unsqueeze(0).contiguous()
         # -> batch_size x nef x words_num
         word = word.repeat(batch_size, 1, 1)
-        # batch x nef x 17*17
-        context = img_features
+        # batch x nef x 49
+        context = img_features.reshape(batch_size, 512, 49)
         """
             word(query): batch x nef x words_num
-            context: batch x nef x 17 x 17
+            context: batch x nef x 7*7
             weiContext: batch x nef x words_num
-            attn: batch x words_num x 17 x 17
+            attn: batch x words_num x 7 x 7
         """
         weiContext, attn = func_attention(word, context, cfg.TRAIN.SMOOTH.GAMMA1)
         att_maps.append(attn[i].unsqueeze(0).contiguous())

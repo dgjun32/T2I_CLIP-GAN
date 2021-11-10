@@ -247,7 +247,7 @@ def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
 class AddLinearOnCLIP(nn.Module):
     def __init__(self):
         super().__init__()
-        self.backbone = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch16')
+        self.backbone = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
         self.linear_subr = nn.Linear(768, 512)
     def forward(self, pixel_values, input_ids, attention_mask):
         batch_size = pixel_values.shape[0]

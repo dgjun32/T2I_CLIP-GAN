@@ -52,10 +52,10 @@ def prepare_data(data, tokenizer):
         else:
             real_imgs_2.append(Variable(imgs_2[i]))
 
-    captions = tokenizer.batch_encode_plus(text_captions, padding = True, return_tensors = 'pt')
+    captions = tokenizer.batch_encode_plus(text_captions, padding = 'max_length', max_length = 77, return_tensors = 'pt')
     captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze().cuda(),
                 'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze().cuda()}
-    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = True, return_tensors = 'pt')
+    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = 'max_length', max_length = 77, return_tensors = 'pt')
     captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze().cuda(),
                 'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze().cuda()}
     # sorted_captions_lens_2 = captions_lens_2[sorted_cap_indices].squeeze()
@@ -127,7 +127,8 @@ class TextDataset(data.Dataset):
                  split='train',
                  base_size=64, 
                  transform=None,
-                 target_transform=None):
+                 target_transform=None,
+                ):
         self.transform = transform
         self.norm = transforms.Compose([
             transforms.ToTensor(),
@@ -155,7 +156,7 @@ class TextDataset(data.Dataset):
         self.class_id = self.load_class_id(split_dir, len(self.filenames))
         self.number_example = len(self.filenames)
         self.split = split
-        self.tokenizer = transformers.CLIPTokenizer.from_pretrained('openai/clip-vit-base-patch32')
+        self.clip_tokenizer = transformers.CLIPTokenizer.from_pretrained('openai/clip-vit-base-patch32')
 
     def load_bbox(self):
         data_dir = self.data_dir
@@ -318,9 +319,10 @@ class TextDataset(data.Dataset):
             return self.ixtoword[ix]
         
         text_caption = " ".join(list(map(_ixtoword, sent_caption)))
-        x_len = len(sent_caption)
+        token = self.clip_tokenizer(text_caption)
+        cap_len = len(token['input_ids'])
 
-        return text_caption, x_len
+        return text_caption, cap_len
 
     def __getitem__(self, index):
         #
