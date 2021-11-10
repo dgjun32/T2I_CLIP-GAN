@@ -17,26 +17,26 @@ __C.GPU_ID = 0
 __C.CUDA = True
 __C.WORKERS = 6
 
-__C.RNN_TYPE = 'LSTM'   # 'GRU'
 __C.B_VALIDATION = False
 
 __C.TREE = edict()
 __C.TREE.BRANCH_NUM = 3
 __C.TREE.BASE_SIZE = 64
 
-
 # Training options
 __C.TRAIN = edict()
+__C.TRAIN.DEVICE = "cuda:0"
+# __C.TRAIN.CLIP_MODEL ="ViT-B/32"
+__C.TRAIN.CLIP_MODEL_CHECKPOINT = "output/pretrained/clip350.pth"
+__C.TRAIN.CLIP_MODEL_BASE = "openai/clip-vit-base-patch32"
+
 __C.TRAIN.BATCH_SIZE = 64
 __C.TRAIN.MAX_EPOCH = 600
 __C.TRAIN.SNAPSHOT_INTERVAL = 2000
 __C.TRAIN.DISCRIMINATOR_LR = 2e-4
 __C.TRAIN.GENERATOR_LR = 2e-4
-__C.TRAIN.BACKBONE_LR = 2e-4
-__C.TRAIN.LINEAR_LR = 2e-4
-__C.TRAIN.RNN_GRAD_CLIP = 0.25
+__C.TRAIN.ENCODER_LR = 2e-4
 __C.TRAIN.FLAG = True
-__C.TRAIN.NET_E = ''
 __C.TRAIN.NET_G = ''
 __C.TRAIN.B_NET_D = True
 
@@ -60,8 +60,8 @@ __C.GAN.B_DCGAN = False
 
 __C.TEXT = edict()
 __C.TEXT.CAPTIONS_PER_IMAGE = 10
-__C.TEXT.EMBEDDING_DIM = 256
-__C.TEXT.WORDS_NUM = 18
+__C.TEXT.EMBEDDING_DIM = 512
+__C.TEXT.WORDS_NUM = 77
 
 
 def _merge_a_into_b(a, b):

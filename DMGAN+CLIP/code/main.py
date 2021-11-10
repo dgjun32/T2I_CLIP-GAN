@@ -1,7 +1,8 @@
 from __future__ import print_function
 
 from miscc.config import cfg, cfg_from_file
-from datasets import TextDataset
+# from datasets import TextDataset
+from datasets import CLIPTextDataset
 from trainer import condGANTrainer as trainer
 
 import os
@@ -16,6 +17,19 @@ import numpy as np
 
 import torch
 import torchvision.transforms as transforms
+import transformers
+from transformers import CLIPModel, CLIPTokenizer
+
+from PIL import Image
+try:
+    from torchvision.transforms import InterpolationMode
+    BICUBIC = InterpolationMode.BICUBIC
+except ImportError:
+    BICUBIC = Image.BICUBIC
+
+
+from model import AddLinearOnCLIP 
+
 
 dir_path = (os.path.abspath(os.path.join(os.path.realpath(__file__), './.')))
 sys.path.append(dir_path)
@@ -25,14 +39,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Train a AttnGAN network')
     parser.add_argument('--cfg', dest='cfg_file',
                         help='optional config file',
-                        default='cfg/bird_DMGAN.yml', type=str)
+                        default='cfg/clip_bird_DMGAN.yml', type=str)
     parser.add_argument('--gpu', dest='gpu_id', type=int, default=-1)
     parser.add_argument('--data_dir', dest='data_dir', type=str, default='')
     parser.add_argument('--NET_G', type=str, default='')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
     args = parser.parse_args()
     return args
-
 
 def gen_example(wordtoix, algo):
     '''generate images from example sentences'''
@@ -89,16 +102,12 @@ if __name__ == "__main__":
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
 
-    if args.gpu_id != -1:
-        cfg.GPU_ID = args.gpu_id
-    else:
-        cfg.CUDA = False
-
     if args.NET_G != '':
         cfg.TRAIN.NET_G = args.NET_G
 
     if args.data_dir != '':
         cfg.DATA_DIR = args.data_dir
+
     print('Using config:')
     pprint.pprint(cfg)
 
@@ -116,8 +125,10 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
     print("Seed: %d" % (args.manualSeed))
 
-    output_dir = '../output/%s_%s' % \
-        (cfg.DATASET_NAME, cfg.CONFIG_NAME)
+    now = datetime.datetime.now(dateutil.tz.tzlocal())
+    timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
+    output_dir = '../output/%s_%s_%s' % \
+        (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
 
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
@@ -126,20 +137,37 @@ if __name__ == "__main__":
 
     # Get data loader
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
+
+    clip_model = AddLinearOnCLIP()
+
+    if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
+        clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
+    else: 
+        clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
+    clip_tokenizer = CLIPTokenizer.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
+
+    if cfg.CUDA:
+        clip_model = clip_model.cuda()
+
     image_transform = transforms.Compose([
         transforms.Scale(int(imsize * 76 / 64)),
         transforms.RandomCrop(imsize),
         transforms.RandomHorizontalFlip()])
-    dataset = TextDataset(cfg.DATA_DIR, split_dir,
-                          base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform)
+        
+    dataset = CLIPTextDataset(
+        cfg.DATA_DIR, 
+        split_dir,
+        base_size=cfg.TREE.BASE_SIZE,
+        transform=image_transform,
+        tokenizer=clip_tokenizer
+    )
     assert dataset
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
         drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
 
     # Define models and go to train/evaluate
-    algo = trainer(output_dir, dataloader, dataset.n_words, dataset.ixtoword, dataset)
+    algo = trainer(output_dir, dataloader, dataset, clip_model, clip_tokenizer, clip_transform=None) 
 
     start_t = time.time()
     if cfg.TRAIN.FLAG:

@@ -52,10 +52,10 @@ def prepare_data(data, tokenizer):
         else:
             real_imgs_2.append(Variable(imgs_2[i]))
 
-    captions = tokenizer.batch_encode_plus(text_captions, padding = True, max_length = 77, return_tensors = 'pt')
+    captions = tokenizer.batch_encode_plus(text_captions, padding = True, return_tensors = 'pt')
     captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze().cuda(),
                 'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze().cuda()}
-    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = True, max_length = 77, return_tensors = 'pt')
+    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = True, return_tensors = 'pt')
     captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze().cuda(),
                 'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze().cuda()}
     # sorted_captions_lens_2 = captions_lens_2[sorted_cap_indices].squeeze()

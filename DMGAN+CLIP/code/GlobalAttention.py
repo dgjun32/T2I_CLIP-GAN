@@ -17,7 +17,7 @@ References:
 https://github.com/OpenNMT/OpenNMT-py/tree/fc23dfef1ba2f258858b2765d24565266526dc76/onmt/modules
 http://www.aclweb.org/anthology/D15-1166
 """
-
+import math
 import torch
 import torch.nn as nn
 
@@ -31,15 +31,19 @@ def conv1x1(in_planes, out_planes):
 def func_attention(query, context, gamma1):
     """
     query: batch x ndf x queryL
-    context: batch x ndf x ih x iw (sourceL=ihxiw)
+    context: batch x ndf x (ih x iw)  == (sourceL=ihxiw)
     mask: batch_size x sourceL
     """
     batch_size, queryL = query.size(0), query.size(2)
-    ih, iw = context.size(2), context.size(3)
-    sourceL = ih * iw
 
-    # --> batch x sourceL x ndf
-    context = context.view(batch_size, -1, sourceL)
+    # no need to do the reshapeing below because contex
+    # ih, iw = context.size(2), context.size(3)
+    # sourceL = ih * iw
+
+    # # --> batch x sourceL x ndf
+    # context = context.view(batch_size, -1, sourceL)
+    
+    sourceL = context.size(2)
     contextT = torch.transpose(context, 1, 2).contiguous()
 
     # Get attention
@@ -65,8 +69,13 @@ def func_attention(query, context, gamma1):
     # (batch x ndf x sourceL)(batch x sourceL x queryL)
     # --> batch x ndf x queryL
     weightedContext = torch.bmm(context, attnT)
-
-    return weightedContext, attn.view(batch_size, -1, ih, iw)
+    att_sze = int(math.sqrt(sourceL - 1)) # 50 => 49 => 7 == att_sze
+    
+    attn = attn[:, :, 1:] # drop the CLS token at the front of the sequence
+    
+    attn = attn.view(batch_size, -1, att_sze, att_sze)
+    # return weightedContext, attn.view(batch_size, -1, ih, iw)
+    return weightedContext, attn
 
 
 class GlobalAttentionGeneral(nn.Module):
