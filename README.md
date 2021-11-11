@@ -4,7 +4,7 @@
 Neural network for Text to Image generation is composed of 2 sub-networks. 
 ```Text Encoder``` and ```Generator Network``` 
 
-Image Encoder and Text Encoder are jointly pretrained from image-caption pair thereby fusing image and text information. After text encoder pretraining, GAN is advarsarially trained to generate realistic image based on text feature.
+Image Encoder and Text Encoder are jointly pretrained from image-caption pair thereby projecting image and text to common space. After text encoder pretraining, Generator Network is advarsarialy trained to generate realistic image based on text feature.
 
 Recent research proposed using <b>DAMSM loss + Contrastive loss</b> for pretraining text encoder, thereby reaching SOTA.
 
@@ -12,16 +12,22 @@ In this work, We replaced RNN based text encoder and CNN based image encoder wit
 
 ## 2. CLIP
 
-CLIP is multimodal encoder for image and natural language, which is pretrained by ```contrastive loss``` with very large batch size(32768).
+```CLIP``` is multimodal encoder for image and natural language, which is pretrained by ```contrastive loss``` with very large batch size(=32768). 
+
+This is link for paper and official pytorch implementation of [CLIP](https://openai.com/blog/clip/)
 
 ## 3. Prepared Data
 
+Download the preprocessed datasets from [AttnGAN](https://github.com/taoxugit/AttnGAN)
 
+Alternatively, another site is from [DM-GAN](https://github.com/MinfengZhu/DM-GAN)
 
 ## 4. Trained model
 
 
-## 5. Evaluation
+## 5. Training
 
-## 6. Citation
+## 6. Evaluation
+
+## 7. Citation
 
