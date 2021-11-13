@@ -35,10 +35,15 @@ __C.TRAIN.MAX_EPOCH = 600
 __C.TRAIN.SNAPSHOT_INTERVAL = 2000
 __C.TRAIN.DISCRIMINATOR_LR = 2e-4
 __C.TRAIN.GENERATOR_LR = 2e-4
-__C.TRAIN.ENCODER_LR = 2e-4
+# lr for pretrained clip layers
+__C.TRAIN.BACKBONE_LR = 2e-5
+# lr for initialized linear layer
+__C.TRAIN.LINEAR_LR = 2e-3
 __C.TRAIN.FLAG = True
+__C.TRAIN.NET_E = ''
 __C.TRAIN.NET_G = ''
 __C.TRAIN.B_NET_D = True
+__C.TRAIN.RNN_GRAD_CLIP = 0.25
 
 __C.TRAIN.SMOOTH = edict()
 __C.TRAIN.SMOOTH.GAMMA1 = 5.0

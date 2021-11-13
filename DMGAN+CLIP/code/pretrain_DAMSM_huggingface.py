@@ -164,8 +164,6 @@ def train(dataloader, clip, batch_size,
         #
         # `clip_grad_norm` helps prevent
         # the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm_(clip.parameters(),
-                                      cfg.TRAIN.RNN_GRAD_CLIP)
 
         optimizer.step()
 
@@ -199,7 +197,7 @@ def train(dataloader, clip, batch_size,
             #     im = Image.fromarray(img_set)
             #     fullpath = '%s/attention_maps%d.png' % (image_dir, step)
             #     im.save(fullpath)
-    return count, loss.item()
+    return count, loss
 
 
 def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
@@ -248,15 +246,13 @@ class AddLinearOnCLIP(nn.Module):
     def __init__(self):
         super().__init__()
         self.backbone = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
-        self.linear_img = nn.Linear(768, 512)
         self.linear_subr = nn.Linear(768, 512)
     def forward(self, pixel_values, input_ids, attention_mask):
         batch_size = pixel_values.shape[0]
         outputs = self.backbone(pixel_values = pixel_values, input_ids = input_ids, attention_mask = attention_mask)
-        img, subr = outputs['vision_model_output']['pooler_output'], outputs['vision_model_output']['last_hidden_state']
-        sent, words = outputs['text_model_output']['pooler_output'], outputs['text_model_output']['last_hidden_state']
+        img, subr = outputs['image_embeds'], outputs['vision_model_output']['last_hidden_state']
+        sent, words = outputs['text_embeds'], outputs['text_model_output']['last_hidden_state']
         # linear transformation for same embedding dimension -> compute word loss
-        img = self.linear_img(img)
         subr = self.linear_subr(subr.view(-1,768)).view(batch_size,-1,512)
         return img, subr, sent, words
 
@@ -340,7 +336,6 @@ if __name__ == "__main__":
     # Build model ##############################################################
     clip, labels, start_epoch, tokenizer = build_models()
     backbone_para = list(clip.backbone.parameters())
-    linear_img_para = list(clip.linear_img.parameters())
     linear_subr_para = list(clip.linear_subr.parameters())
     # Train ##############################################################
     # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
@@ -355,12 +350,11 @@ if __name__ == "__main__":
     try:
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
-        for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
-            optimizer = optim.AdamW([
+        optimizer = optim.AdamW([
                         {'params' : backbone_para, 'lr' : backbone_lr, 'betas':(0.5, 0.999), 'eps':1e-6},
-                        {'params' : linear_img_para, 'lr' : linear_lr, 'betas':(0.5, 0.999), 'eps':1e-6},
                         {'params' : linear_subr_para, 'lr' : linear_lr, 'betas':(0.5, 0.999), 'eps':1e-6}
                         ])
+        for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             epoch_start_time = time.time()
             count, wsc_loss = train(dataloader, clip,
                           batch_size, labels, optimizer, epoch,
@@ -374,8 +368,8 @@ if __name__ == "__main__":
             print('-' * 89)
             # val_loss logging
             summary.add_scalar('train_loss/wsc_loss', wsc_loss.item(), epoch)
-            summary.add_scalar('val_loss/w_loss', w_loss.item(), epoch)
-            summary.add_scalar('val_loss/s_loss', s_loss.item(), epoch)
+            summary.add_scalar('val_loss/w_loss', w_loss, epoch)
+            summary.add_scalar('val_loss/s_loss', s_loss, epoch)
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
                 torch.save(clip.state_dict(),

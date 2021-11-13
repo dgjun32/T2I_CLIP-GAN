@@ -1,34 +1,10 @@
 import torch
 import torch.nn as nn
-from PIL import Image
 
 import numpy as np
 from miscc.config import cfg
 
 from GlobalAttention import func_attention
-import torch.nn.functional as F
-import torchvision.transforms.functional as TF
-
-# import torchvision.transforms.functional.normalize as TF
-
-def forward(clip_model, image, text):
-    image_features = clip_model.encode_image(image)
-    text_features = clip_model.encode_text(text)
-
-    # normalized features
-    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-
-    # cosine similarity as logits
-    logit_scale = clip_model.logit_scale.exp()
-    logits_per_image = logit_scale * image_features @ text_features.t()
-    logits_per_text = logits_per_image.t()
-
-    logits_per_image, logits_per_text = clip_model(image, text)
-    probs = logits_per_image.softmax(dim=-1).detach().cpu().numpy()
-
-    # shape = [global_batch_size, global_batch_size]
-    return probs
 
 
 # ##################Loss for matching text-image###################
@@ -88,7 +64,7 @@ def words_loss(img_features, words_emb, labels,
                cap_lens, class_ids, batch_size):
     """
         words_emb(query): batch x nef x seq_len
-        img_features(context): batch x nef x 17 x 17
+        img_features(context): batch x nef x 7 x 7
     """
     masks = []
     att_maps = []
@@ -105,15 +81,14 @@ def words_loss(img_features, words_emb, labels,
         word = words_emb[i, :, :words_num].unsqueeze(0).contiguous()
         # -> batch_size x nef x words_num
         word = word.repeat(batch_size, 1, 1)
-        # batch x nef x 17*17
-        context = img_features
+        # batch x nef x 49
+        context = img_features.reshape(batch_size, 512, 49)
         """
             word(query): batch x nef x words_num
-            context: batch x nef x 17 x 17
+            context: batch x nef x 7*7
             weiContext: batch x nef x words_num
-            attn: batch x words_num x 17 x 17
+            attn: batch x words_num x 7 x 7
         """
-        
         weiContext, attn = func_attention(word, context, cfg.TRAIN.SMOOTH.GAMMA1)
         att_maps.append(attn[i].unsqueeze(0).contiguous())
         # --> batch_size x words_num x nef
@@ -190,14 +165,13 @@ def discriminator_loss(netD, real_imgs, fake_imgs, conditions,
     return errD, log
 
 
-def generator_loss(netsD, clip_model, fake_imgs, real_labels,
+def generator_loss(netsD, image_encoder, fake_imgs, real_labels,
                    words_embs, sent_emb, match_labels,
-                   cap_lens, class_ids, clip_transform):
+                   cap_lens, class_ids):
     numDs = len(netsD)
     batch_size = real_labels.size(0)
     logs = ''
     # Forward
-    image_encodings = []
     errG_total = 0
     for i in range(numDs):
         features = netsD[i](fake_imgs[i])
@@ -217,42 +191,44 @@ def generator_loss(netsD, clip_model, fake_imgs, real_labels,
         if i == (numDs - 1):
             # words_features: batch_size x nef x 17 x 17
             # sent_code: batch_size x nef
-
-              # # testing interpolation.
-            # im = fake_imgs[i][0].detach().cpu().numpy()
-            # im = (im + 1.0) * 127.5
-            # im = im.astype(np.uint8)
-            # im = np.transpose(im, (1, 2, 0))
-            # im = Image.fromarray(im)
-            # im.save("FAKE.png")
-            # clip_resized_im = F.interpolate(fake_imgs[i], size=clip_model.backbone.vision_model.config.image_size)
-            # im = clip_resized_im[0].detach().cpu().numpy()
-            # im = (im + 1.0) * 127.5
-            # im = im.astype(np.uint8)
-            # im = np.transpose(im, (1, 2, 0))
-            # im = Image.fromarray(im)
-            # im.save("RESIZED.png")
-            # raise Exception()
-            clip_resized = F.interpolate(fake_imgs[i], size=clip_model.backbone.vision_model.config.image_size)
-            region_features, image_encoding = clip_model.encode_image_verbose(clip_resized)
-    
-           
+            region_features, cnn_code = image_encoder(fake_imgs[i])
             w_loss0, w_loss1, _ = words_loss(region_features, words_embs,
                                              match_labels, cap_lens,
                                              class_ids, batch_size)
             w_loss = (w_loss0 + w_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+            # err_words = err_words + w_loss.data[0]
 
-            s_loss0, s_loss1 = sent_loss(
-                image_encoding, sent_emb, match_labels, class_ids, batch_size
-            )
+            s_loss0, s_loss1 = sent_loss(cnn_code, sent_emb,
+                                         match_labels, class_ids, batch_size)
             s_loss = (s_loss0 + s_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+            # err_sent = err_sent + s_loss.data[0]
 
-            image_encodings.append(image_encoding)
-            
             errG_total += w_loss + s_loss
             logs += 'w_loss: %.2f s_loss: %.2f ' % (w_loss.item(), s_loss.item())
 
-    return errG_total, logs, image_encoding
+
+
+
+        #
+        # # Ranking loss
+        # # words_features: batch_size x nef x 17 x 17
+        # # sent_code: batch_size x nef
+        # region_features, cnn_code = image_encoder(fake_imgs[i])
+        # w_loss0, w_loss1, _ = words_loss(region_features, words_embs,
+        #                                  match_labels, cap_lens,
+        #                                  class_ids, batch_size)
+        # w_loss = (w_loss0 + w_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+        # # err_words = err_words + w_loss.data[0]
+        #
+        # s_loss0, s_loss1 = sent_loss(cnn_code, sent_emb,
+        #                              match_labels, class_ids, batch_size)
+        # s_loss = (s_loss0 + s_loss1) * cfg.TRAIN.SMOOTH.LAMBDA
+        # # err_sent = err_sent + s_loss.data[0]
+        #
+        # errG_total += w_loss + s_loss
+        # logs += 'w_loss: %.2f s_loss: %.2f ' % (w_loss.item(), s_loss.item())
+
+    return errG_total, logs, cnn_code
 
 
 ##################################################################
