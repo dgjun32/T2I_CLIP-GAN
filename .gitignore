@@ -9,3 +9,4 @@ AttnGAN+CLIP/output/
 DMGAN+CLIP/output/
 DMGAN+CLIP/output/
 __pycache__
+*.out

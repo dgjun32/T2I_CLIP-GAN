@@ -1,0 +1,32 @@
+CONFIG_NAME: 'DMGAN'
+
+DATASET_NAME: 'birds'
+DATA_DIR: '../data/birds'
+GPU_ID: 0
+WORKERS: 2
+
+B_VALIDATION: True  # True  # False
+TREE:
+    BRANCH_NUM: 3
+
+
+TRAIN:
+    FLAG: False
+    CLIP_MODEL_CHECKPOINT: "../output/pretrained/clip350.pth"
+    CLIP_MODEL_BASE: "openai/clip-vit-base-patch32"
+    NET_G: '../output/birds_DMGAN_2021_11_07_07_47_39/Model/netG_epoch_400.pth'
+    B_NET_D: False
+    BATCH_SIZE: 10
+    # NET_E: '../DAMSMencoders/bird/text_encoder200.pth'
+
+
+GAN:
+    DF_DIM: 32
+    GF_DIM: 64
+    Z_DIM: 100
+    R_NUM: 2
+
+TEXT:
+    EMBEDDING_DIM: 512
+    CAPTIONS_PER_IMAGE: 10
+    WORDS_NUM: 77
