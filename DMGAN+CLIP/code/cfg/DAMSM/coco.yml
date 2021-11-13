@@ -17,8 +17,8 @@ TRAIN:
     BATCH_SIZE: 48
     MAX_EPOCH: 200
     SNAPSHOT_INTERVAL: 5
-    BACKBONE_LR: 0.00002  # 0.0002best; 0.002good
-    LINEAR_LR: 0.0002
+    BACKBONE_LR: 0.00001  # 0.0002best; 0.002good
+    LINEAR_LR: 0.001
     RNN_GRAD_CLIP: 0.25
     SMOOTH:
         GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad
