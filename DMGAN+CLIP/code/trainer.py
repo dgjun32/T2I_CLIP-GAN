@@ -423,6 +423,8 @@ class condGANTrainer(object):
             print('-' * 89)
             if epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0:  # and epoch != 0:
                 self.save_model(netG, avg_param_G, netsD, epoch)
+                torch.save(clip_model.state_dict(),
+                           '%s/clip%d.pth' % (self.model_dir, epoch))
 
         self.save_model(netG, avg_param_G, netsD, self.max_epoch)
 
@@ -526,13 +528,15 @@ class condGANTrainer(object):
 
                     # _, cnn_code = image_encoder(fake_imgs[-1])
 
-                    fake_im = Image.fromarray(fake_imgs[-1])
-                    fake_im.save("FAKE.png")
-                    clip_resized = F.interpolate(fake_imgs[-1], size=clip_model.visual.input_resolution)
-                    clip_resized_im = Image.fromarray(clip_resized)
-                    clip_resized_im.save("RESIZED.png")
+                    # fake_im = Image.fromarray(fake_imgs[-1])
+                    # fake_im.save("FAKE.png")
+                    clip_resized = F.interpolate(fake_imgs[-1], size=clip_model.backbone.vision_model.config.image_size)
+                    # clip_resized = F.interpolate(fake_imgs[], size=clip_model.visual.input_resolution)
+                    # clip_resized_im = Image.fromarray(clip_resized)
+                    # clip_resized_im.save("RESIZED.png")
 
-                    cnn_code = clip_model.encode_image(clip_resized)
+                    _, cnn_code = clip_model.encode_image_verbose(clip_resized)
+                    
                     
                     for i in range(batch_size):
                         mis_captions, mis_captions_len = self.dataset.get_mis_caption(class_ids[i])

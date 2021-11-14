@@ -13,8 +13,10 @@ from GlobalAttention import GlobalAttentionGeneral as ATT_NET
 from GlobalAttention import GlobalAttention_text as ATT_NET_text
 from spectral import SpectralNorm
 
-
-
+# you may check AddLinearOnCLIP from pretrain_DAMSM_huggingface.py
+# global sentence feature와 image feature를 산출할 때, CLIP의 pooler output 대신 final embeds를 사용하는 것이 pretrain 시
+# word loss 와 sent loss가 더 낮게 나와서, 일부 수정을 했습니다.
+'''
 class AddLinearOnCLIP(nn.Module):
     def __init__(self):
         super().__init__()
@@ -87,6 +89,7 @@ class AddLinearOnCLIP(nn.Module):
         img = self.linear_img(img)
         subr = self.linear_subr(subr.view(-1,768)).view(batch_size,-1,512)
         return img, subr, sent, words
+'''
 
 
 class GLU(nn.Module):
