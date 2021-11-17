@@ -64,7 +64,7 @@ def parse_args():
 
 
 def train(dataloader, clip, batch_size,
-          labels, optimizer, epoch, ixtoword, image_dir, criterion, tokenizer):
+          labels, backbone_optimizer, linear_optimizer, epoch, ixtoword, image_dir, criterion, tokenizer):
     clip.train()
     s_total_loss0 = 0
     s_total_loss1 = 0
@@ -167,7 +167,8 @@ def train(dataloader, clip, batch_size,
         torch.nn.utils.clip_grad_norm_(clip.parameters(),
                                       cfg.TRAIN.RNN_GRAD_CLIP)
 
-        optimizer.step()
+        backbone_optimizer.step()
+        linear_optimizer.step()
 
         if step % UPDATE_INTERVAL == 0:
             count = epoch * len(dataloader) + step
@@ -271,6 +272,64 @@ def build_models():
 
     return clip, labels, start_epoch, tokenizer
 
+import math
+from torch.optim.lr_scheduler import _LRScheduler
+
+class CosineAnnealingWarmUpRestarts(_LRScheduler):
+    def __init__(self, optimizer, T_0, T_mult=1, eta_max=0.1, T_up=0, gamma=1., last_epoch=-1):
+        if T_0 <= 0 or not isinstance(T_0, int):
+            raise ValueError("Expected positive integer T_0, but got {}".format(T_0))
+        if T_mult < 1 or not isinstance(T_mult, int):
+            raise ValueError("Expected integer T_mult >= 1, but got {}".format(T_mult))
+        if T_up < 0 or not isinstance(T_up, int):
+            raise ValueError("Expected positive integer T_up, but got {}".format(T_up))
+        self.T_0 = T_0
+        self.T_mult = T_mult
+        self.base_eta_max = eta_max
+        self.eta_max = eta_max
+        self.T_up = T_up
+        self.T_i = T_0
+        self.gamma = gamma
+        self.cycle = 0
+        self.T_cur = last_epoch
+        super(CosineAnnealingWarmUpRestarts, self).__init__(optimizer, last_epoch)
+    
+    def get_lr(self):
+        if self.T_cur == -1:
+            return self.base_lrs
+        elif self.T_cur < self.T_up:
+            return [(self.eta_max - base_lr)*self.T_cur / self.T_up + base_lr for base_lr in self.base_lrs]
+        else:
+            return [base_lr + (self.eta_max - base_lr) * (1 + math.cos(math.pi * (self.T_cur-self.T_up) / (self.T_i - self.T_up))) / 2
+                    for base_lr in self.base_lrs]
+
+    def step(self, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
+            self.T_cur = self.T_cur + 1
+            if self.T_cur >= self.T_i:
+                self.cycle += 1
+                self.T_cur = self.T_cur - self.T_i
+                self.T_i = (self.T_i - self.T_up) * self.T_mult + self.T_up
+        else:
+            if epoch >= self.T_0:
+                if self.T_mult == 1:
+                    self.T_cur = epoch % self.T_0
+                    self.cycle = epoch // self.T_0
+                else:
+                    n = int(math.log((epoch / self.T_0 * (self.T_mult - 1) + 1), self.T_mult))
+                    self.cycle = n
+                    self.T_cur = epoch - self.T_0 * (self.T_mult ** n - 1) / (self.T_mult - 1)
+                    self.T_i = self.T_0 * self.T_mult ** (n)
+            else:
+                self.T_i = self.T_0
+                self.T_cur = epoch
+                
+        self.eta_max = self.base_eta_max * (self.gamma**self.cycle)
+        self.last_epoch = math.floor(epoch)
+        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
+            param_group['lr'] = lr
+
 
 if __name__ == "__main__":
     args = parse_args()
@@ -352,14 +411,18 @@ if __name__ == "__main__":
     try:
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
-        optimizer = optim.AdamW([
-                        {'params' : backbone_para, 'lr' : backbone_lr, 'betas':(0.5, 0.999), 'eps':1e-6},
-                        {'params' : linear_subr_para, 'lr' : linear_lr, 'betas':(0.5, 0.999), 'eps':1e-6}
-                        ])
+        # optimizer
+        backbone_optimizer = optim.AdamW(backbone_para, lr = 1e-8, betas = (0.5, 0.999))
+        linear_optimizer = optim.AdamW(linear_subr_para, lr = 1e-8, betas = (0.5, 0.999))
+        # lr schedule
+        backbone_sched = CosineAnnealingWarmUpRestarts(backbone_optimizer, T_0=3, T_mult=1,
+                                                     eta_max=backbone_lr, T_up=1, gamma=0.5)
+        linear_sched = CosineAnnealingWarmUpRestarts(linear_optimizer, T_0 =3, T_mult=1,
+                                                     eta_max=linear_lr, T_up=1, gamma=0.5)
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             epoch_start_time = time.time()
             count, wsc_loss = train(dataloader, clip,
-                          batch_size, labels, optimizer, epoch,
+                          batch_size, labels, backbone_optimizer, linear_optimizer, epoch,
                           dataset.ixtoword, image_dir, criterion, tokenizer)
             print('-' * 89)
             if len(dataloader_val) > 0:
@@ -377,6 +440,8 @@ if __name__ == "__main__":
                 torch.save(clip.state_dict(),
                            '%s/clip%d.pth' % (model_dir, epoch))
                 print('Save G/Ds models.')
+            backbone_sched.step()
+            linear_sched.step()
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')

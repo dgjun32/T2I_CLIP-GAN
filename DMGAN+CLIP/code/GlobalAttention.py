@@ -69,10 +69,9 @@ def func_attention(query, context, gamma1):
     # (batch x ndf x sourceL)(batch x sourceL x queryL)
     # --> batch x ndf x queryL
     weightedContext = torch.bmm(context, attnT)
-    att_sze = int(math.sqrt(sourceL - 1)) # 50 => 49 => 7 == att_sze
+    att_sze = int(math.sqrt(sourceL)) # 49 => 7 == att_sze
     
-    attn = attn[:, :, 1:] # drop the CLS token at the front of the sequence
-    
+    # drop the CLS token at the front of the sequence
     attn = attn.view(batch_size, -1, att_sze, att_sze)
     # return weightedContext, attn.view(batch_size, -1, ih, iw)
     return weightedContext, attn
