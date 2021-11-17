@@ -412,8 +412,8 @@ if __name__ == "__main__":
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
         # optimizer
-        backbone_optimizer = optim.AdamW(backbone_para, lr = 1e-8, betas = (0.5, 0.999))
-        linear_optimizer = optim.AdamW(linear_subr_para, lr = 1e-8, betas = (0.5, 0.999))
+        backbone_optimizer = optim.AdamW(backbone_para, lr = 1e-7, betas = (0.5, 0.999))
+        linear_optimizer = optim.AdamW(linear_subr_para, lr = 1e-7, betas = (0.5, 0.999))
         # lr schedule
         backbone_sched = CosineAnnealingWarmUpRestarts(backbone_optimizer, T_0=3, T_mult=1,
                                                      eta_max=backbone_lr, T_up=1, gamma=0.5)
