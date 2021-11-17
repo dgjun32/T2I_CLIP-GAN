@@ -42,6 +42,12 @@ __C.TRAIN.BACKBONE_LR = 2e-5
 __C.TRAIN.LINEAR_LR = 2e-3
 # for gradient clipping
 __C.TRAIN.RNN_GRAD_CLIP = 0.25
+# optimizer hyperparams
+__C.TRAIN.T_0 = 10
+__C.TRAIN.T_up = 5
+__C.TRAIN.T_mult = 1
+__C.TRAIN.gamma = 0.5
+__C.TRAIN.init_lr = 1e-7
 
 __C.TRAIN.FLAG = True
 __C.TRAIN.NET_G = ''

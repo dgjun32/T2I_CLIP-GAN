@@ -409,16 +409,22 @@ if __name__ == "__main__":
 
 
     try:
+        # opimizer hyperparams
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
+        init_lr = cfg.TRAIN.init_lr
+        T_0 = cfg.TRAIN.T_0
+        T_mult = cfg.TRAIN.T_mult
+        T_up = cfg.TRAIN.T_up
+        gamma = cfg.TRAIN.gamma
         # optimizer
-        backbone_optimizer = optim.AdamW(backbone_para, lr = 1e-7, betas = (0.5, 0.999))
-        linear_optimizer = optim.AdamW(linear_subr_para, lr = 1e-7, betas = (0.5, 0.999))
+        backbone_optimizer = optim.AdamW(backbone_para, lr = init_lr, betas = (0.5, 0.999))
+        linear_optimizer = optim.AdamW(linear_subr_para, lr = init_lr, betas = (0.5, 0.999))
         # lr schedule
-        backbone_sched = CosineAnnealingWarmUpRestarts(backbone_optimizer, T_0=3, T_mult=1,
-                                                     eta_max=backbone_lr, T_up=1, gamma=0.5)
-        linear_sched = CosineAnnealingWarmUpRestarts(linear_optimizer, T_0 =3, T_mult=1,
-                                                     eta_max=linear_lr, T_up=1, gamma=0.5)
+        backbone_sched = CosineAnnealingWarmUpRestarts(backbone_optimizer, T_0=T_0, T_mult=T_mult,
+                                                     eta_max=backbone_lr, T_up=T_up, gamma=gamma)
+        linear_sched = CosineAnnealingWarmUpRestarts(linear_optimizer, T_0=T_0, T_mult=T_mult,
+                                                     eta_max=linear_lr, T_up=T_up, gamma=gamma)
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             epoch_start_time = time.time()
             count, wsc_loss = train(dataloader, clip,
