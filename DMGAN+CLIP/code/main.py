@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from miscc.config import cfg, cfg_from_file
 # from datasets import TextDataset
-from datasets import CLIPTextDataset
+from datasets import TextDataset
 from trainer import condGANTrainer as trainer
 
 import os
@@ -144,7 +144,7 @@ if __name__ == "__main__":
         # load pretrained CLIP
         clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
     else: 
-        # clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
+        clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
         # mean cfg.TRAIN.CLIP_MODEL_BASE ?
     clip_tokenizer = CLIPTokenizer.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
 
@@ -156,12 +156,11 @@ if __name__ == "__main__":
         transforms.RandomCrop(imsize),
         transforms.RandomHorizontalFlip()])
         
-    dataset = CLIPTextDataset(
+    dataset = TextDataset(
         cfg.DATA_DIR, 
         split_dir,
         base_size=cfg.TREE.BASE_SIZE,
         transform=image_transform,
-        tokenizer=clip_tokenizer
     )
     assert dataset
     dataloader = torch.utils.data.DataLoader(

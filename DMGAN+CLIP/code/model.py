@@ -434,6 +434,7 @@ class Memory(nn.Module):
         # --> batch*queryL x sourceL
         weight = weight.view(batch_size * queryL, sourceL)
         if self.mask is not None:
+            self.mask = self.mask > 0
             # batch_size x sourceL --> batch_size*queryL x sourceL
             mask = self.mask.repeat(queryL, 1)
             weight.data.masked_fill_(mask.data, -float('inf'))
