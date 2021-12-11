@@ -14,11 +14,11 @@ TRAIN:
     CLIP_MODEL_CHECKPOINT: "../output/pretrained/clip350.pth"
     CLIP_MODEL_BASE: "openai/clip-vit-base-patch32"
     FLAG: True
-    NET_G:  ''
+    NET_G:  ""
     B_NET_D: True
     BATCH_SIZE: 10  # 22
-    MAX_EPOCH: 800
-    SNAPSHOT_INTERVAL: 50
+    MAX_EPOCH: 10
+    SNAPSHOT_INTERVAL: 2
     DISCRIMINATOR_LR: 0.0002
     GENERATOR_LR: 0.0002
     SMOOTH:

@@ -44,7 +44,6 @@ def parse_args():
     parser.add_argument('--data_dir', dest='data_dir', type=str, default='')
     parser.add_argument('--NET_G', type=str, default='')
     parser.add_argument('--manualSeed', type=int, help='manual seed')
-
     args = parser.parse_args()
     return args
 
@@ -99,6 +98,7 @@ def gen_example(wordtoix, algo):
 
 
 if __name__ == "__main__":
+    print("start")
     args = parse_args()
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
@@ -109,6 +109,7 @@ if __name__ == "__main__":
     if args.data_dir != '':
         cfg.DATA_DIR = args.data_dir
 
+    print('Using config:')
     pprint.pprint(cfg)
 
     if not cfg.TRAIN.FLAG:
@@ -127,8 +128,8 @@ if __name__ == "__main__":
 
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
-    output_dir = '../output/%s_%s' % \
-        (cfg.DATASET_NAME, cfg.CONFIG_NAME)
+    output_dir = '../output/%s_%s_%s' % \
+        (cfg.DATASET_NAME, cfg.CONFIG_NAME, timestamp)
 
     split_dir, bshuffle = 'train', True
     if not cfg.TRAIN.FLAG:
@@ -139,13 +140,11 @@ if __name__ == "__main__":
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
 
     clip_model = AddLinearOnCLIP()
-    print("clipload")
     if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
         clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
     else: 
         clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
     clip_tokenizer = CLIPTokenizer.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
-    print("loaded")
     if cfg.CUDA:
         clip_model = clip_model.cuda()
 
