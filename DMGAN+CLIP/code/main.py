@@ -141,9 +141,11 @@ if __name__ == "__main__":
     clip_model = AddLinearOnCLIP()
 
     if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
+        # load pretrained CLIP
         clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
     else: 
-        clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
+        # clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
+        # mean cfg.TRAIN.CLIP_MODEL_BASE ?
     clip_tokenizer = CLIPTokenizer.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
 
     if cfg.CUDA:

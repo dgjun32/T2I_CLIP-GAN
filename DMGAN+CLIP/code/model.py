@@ -13,13 +13,11 @@ from GlobalAttention import GlobalAttentionGeneral as ATT_NET
 from GlobalAttention import GlobalAttention_text as ATT_NET_text
 from spectral import SpectralNorm
 
-
-
+# For pretrained text&image encoder
 class AddLinearOnCLIP(nn.Module):
     def __init__(self):
         super().__init__()
         self.backbone = transformers.CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
-        self.linear_img = nn.Linear(768, 512)
         self.linear_subr = nn.Linear(768, 512)
 
     def encode_image_verbose(
@@ -42,17 +40,11 @@ class AddLinearOnCLIP(nn.Module):
         )
         batch_size = pixel_values.size(0)
         
-        img = vision_outputs["pooler_output"]
+        image_encoding = vision_outputs["pooler_output"]
         subr = vision_outputs["last_hidden_state"]
-
-        # batch_size = pixel_values.shape[0]
-        # outputs = self.backbone(pixel_values = pixel_values, input_ids = input_ids, attention_mask = attention_mask)
-        # img, subr = outputs['vision_model_output']['pooler_output'], outputs['vision_model_output']['last_hidden_state']
-        
-        image_encoding = self.linear_img(img)
+        image_encoding = self.backbone.visual_projection(image_encoding)
         region_encoding = self.linear_subr(subr.view(-1,768)).view(batch_size,-1,512)
         
-
         return region_encoding.permute(0,2,1), image_encoding
 
     def encode_text_verbose(
@@ -81,10 +73,9 @@ class AddLinearOnCLIP(nn.Module):
     def forward(self, pixel_values, input_ids, attention_mask):
         batch_size = pixel_values.shape[0]
         outputs = self.backbone(pixel_values = pixel_values, input_ids = input_ids, attention_mask = attention_mask)
-        img, subr = outputs['vision_model_output']['pooler_output'], outputs['vision_model_output']['last_hidden_state']
-        sent, words = outputs['text_model_output']['pooler_output'], outputs['text_model_output']['last_hidden_state']
+        img, subr = outputs['image_embeds'], outputs['vision_model_output']['last_hidden_state']
+        sent, words = outputs['text_embeds'], outputs['text_model_output']['last_hidden_state']
         # linear transformation for same embedding dimension -> compute word loss
-        img = self.linear_img(img)
         subr = self.linear_subr(subr.view(-1,768)).view(batch_size,-1,512)
         return img, subr, sent, words
 

@@ -35,15 +35,24 @@ __C.TRAIN.MAX_EPOCH = 600
 __C.TRAIN.SNAPSHOT_INTERVAL = 2000
 __C.TRAIN.DISCRIMINATOR_LR = 2e-4
 __C.TRAIN.GENERATOR_LR = 2e-4
+
 # lr for pretrained clip layers
 __C.TRAIN.BACKBONE_LR = 2e-5
 # lr for initialized linear layer
 __C.TRAIN.LINEAR_LR = 2e-3
-__C.TRAIN.FLAG = True
-__C.TRAIN.NET_E = ''
-__C.TRAIN.NET_G = ''
-__C.TRAIN.B_NET_D = True
+# for gradient clipping
 __C.TRAIN.RNN_GRAD_CLIP = 0.25
+# optimizer hyperparams
+__C.TRAIN.T_0 = 10
+__C.TRAIN.T_up = 5
+__C.TRAIN.T_mult = 1
+__C.TRAIN.gamma = 0.5
+__C.TRAIN.init_lr = 1e-7
+
+__C.TRAIN.FLAG = True
+__C.TRAIN.NET_G = ''
+__C.TRAIN.NET_E = ''
+__C.TRAIN.B_NET_D = True
 
 __C.TRAIN.SMOOTH = edict()
 __C.TRAIN.SMOOTH.GAMMA1 = 5.0

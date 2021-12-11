@@ -30,11 +30,11 @@ def conv1x1(in_planes, out_planes):
 
 def func_attention(query, context, gamma1):
     """
-    query: batch x 512 x words_num
-    context: batch x 512 x 49  == (sourceL=ihxiw)
-    mask: batch_size x 49
+    query: batch x ndf x queryL
+    context: batch x ndf x (ih x iw)  == (sourceL=ihxiw)
+    mask: batch_size x sourceL
     """
-    batch_size, queryL = query.size(0), query.size(2) # batch_size, words_num
+    batch_size, queryL = query.size(0), query.size(2)
 
     # no need to do the reshapeing below because contex
     # ih, iw = context.size(2), context.size(3)
@@ -43,22 +43,22 @@ def func_attention(query, context, gamma1):
     # # --> batch x sourceL x ndf
     # context = context.view(batch_size, -1, sourceL)
     
-    sourceL = context.size(2) # == 49
-    contextT = torch.transpose(context, 1, 2).contiguous() # batch x 49 x 512
+    sourceL = context.size(2)
+    contextT = torch.transpose(context, 1, 2).contiguous()
 
     # Get attention
     # (batch x sourceL x ndf)(batch x ndf x queryL)
     # -->batch x sourceL x queryL
     attn = torch.bmm(contextT, query)  # Eq. (7) in AttnGAN paper
-    # --> shape of (batch x 49 x words_num)
-    attn = attn.view(batch_size * sourceL, queryL) # shape of (batch_size*49, words_num)
+    # --> batch*sourceL x queryL
+    attn = attn.view(batch_size * sourceL, queryL)
     attn = nn.Softmax()(attn)  # Eq. (8)
 
     # --> batch x sourceL x queryL
-    attn = attn.view(batch_size, sourceL, queryL) # shape of (batch_size, 49, words_num)
+    attn = attn.view(batch_size, sourceL, queryL)
     # --> batch*queryL x sourceL
-    attn = torch.transpose(attn, 1, 2).contiguous() # shape of (batch_size, words_num, 49)
-    attn = attn.view(batch_size * queryL, sourceL) 
+    attn = torch.transpose(attn, 1, 2).contiguous()
+    attn = attn.view(batch_size * queryL, sourceL)
     #  Eq. (9)
     attn = attn * gamma1
     attn = nn.Softmax()(attn)
@@ -69,8 +69,9 @@ def func_attention(query, context, gamma1):
     # (batch x ndf x sourceL)(batch x sourceL x queryL)
     # --> batch x ndf x queryL
     weightedContext = torch.bmm(context, attnT)
-    att_sze = int(math.sqrt(sourceL)) # == 7
+    att_sze = int(math.sqrt(sourceL)) # 49 => 7 == att_sze
     
+    # drop the CLS token at the front of the sequence
     attn = attn.view(batch_size, -1, att_sze, att_sze)
     # return weightedContext, attn.view(batch_size, -1, ih, iw)
     return weightedContext, attn
