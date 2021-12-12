@@ -36,7 +36,7 @@ sys.path.append(dir_path)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train a AttnGAN network')
+    parser = argparse.ArgumentParser(description='Train a DMGAN network')
     parser.add_argument('--cfg', dest='cfg_file',
                         help='optional config file',
                         default='cfg/clip_bird_DMGAN.yml', type=str)
@@ -143,9 +143,10 @@ if __name__ == "__main__":
     if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
         # load pretrained CLIP
         clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
+        print(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
     else: 
         clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
-        # mean cfg.TRAIN.CLIP_MODEL_BASE ?
+
     clip_tokenizer = CLIPTokenizer.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
 
     if cfg.CUDA:
