@@ -11,7 +11,7 @@ TREE:
 
 TRAIN:
     DEVICE: "cuda:0"
-    CLIP_MODEL_CHECKPOINT: "../output/birds_DAMSM_CLIP/Model/clip60.pth"
+    CLIP_MODEL_CHECKPOINT: "../output/birds_DAMSM_CLIP/Model/clip70.pth"
     CLIP_MODEL_BASE: "openai/clip-vit-base-patch32"
     FLAG: True
     NET_G:  ''
