@@ -253,6 +253,7 @@ class condGANTrainer(object):
         gen_iterations = 0
         
         mask = mask_correlated_samples(self)
+        print(mask.shape)
 
         temperature = 0.5
         device = noise.get_device()
@@ -277,7 +278,11 @@ class condGANTrainer(object):
                 
                 # imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
                 imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-                sort_ind, sort_ind_2 = prepare_data(data)
+                sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
+
+                # attention mask
+                mask = captions['attention_mask']
+                mask_2 = captions_2['attention_mask']
 
                 # if cfg.CUDA:
                 #     captions = captions.cuda()
@@ -291,27 +296,24 @@ class condGANTrainer(object):
                 ## words_embs, sent_emb = words_embs.detach(), sent_emb.detach()
                 # print("captions", captions)
                 # words_embs, sent_emb = clip_encode_text(clip_model, captions)
-                
-                words_embs, sent_emb = clip_model.encode_text_verbose(captions)
-
-              
-                words_embs_2, sent_emb_2 = clip_model.encode_text_verbose(captions_2)
+                words_embs, sent_emb = clip_model.encode_text_verbose(**captions)
+                words_embs_2, sent_emb_2 = clip_model.encode_text_verbose(**captions_2)
                 
                 #######################################################
                 # (2) Generate fake images
                 ######################################################
                 words_embs, sent_emb = words_embs.detach(), sent_emb.detach()
-                mask = (captions == 0)
-                num_words = words_embs.size(2)
-                if mask.size(1) > num_words:
-                    mask = mask[:, :num_words]
+                #mask = (captions == 0)
+                #num_words = words_embs.size(2)
+                #if mask.size(1) > num_words:
+                #    mask = mask[:, :num_words]
 
 
                 words_embs_2, sent_emb_2 = words_embs_2.detach(), sent_emb_2.detach()
-                mask_2 = (captions == 0)
-                num_words = words_embs_2.size(2)
-                if mask.size(1) > num_words:
-                    mask_2 = mask_2[:, :num_words]
+                #mask_2 = (captions == 0)
+                #num_words = words_embs_2.size(2)
+                #if mask.size(1) > num_words:
+                #    mask_2 = mask_2[:, :num_words]
 
 
                 noise.data.normal_(0, 1)

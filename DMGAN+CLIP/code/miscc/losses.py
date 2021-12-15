@@ -234,8 +234,8 @@ def generator_loss(netsD, clip_model, fake_imgs, real_labels,
             # raise Exception()
             clip_resized = F.interpolate(fake_imgs[i], size=clip_model.backbone.vision_model.config.image_size)
             region_features, image_encoding = clip_model.encode_image_verbose(clip_resized)
+            region_features = region_features[:,:,1:].reshape(-1, 512, 7, 7)
     
-           
             w_loss0, w_loss1, _ = words_loss(region_features, words_embs,
                                              match_labels, cap_lens,
                                              class_ids, batch_size)
