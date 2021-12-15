@@ -2,7 +2,7 @@ from __future__ import print_function
 
 from miscc.config import cfg, cfg_from_file
 # from datasets import TextDataset
-from datasets import TextDataset
+from datasets import TextDataset, prepare_data
 from trainer import condGANTrainer as trainer
 
 import os
@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 import transformers
+from torch.utils.data._utils.collate import default_collate
 from transformers import CLIPModel, CLIPTokenizer
 
 from PIL import Image
@@ -164,9 +165,14 @@ if __name__ == "__main__":
         transform=image_transform,
     )
     assert dataset
+
+    def collate_fn(batch):
+        batch = default_collate(batch)
+        return prepare_data(batch, clip_tokenizer)
+
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=cfg.TRAIN.BATCH_SIZE,
-        drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS))
+        drop_last=True, shuffle=bshuffle, num_workers=int(cfg.WORKERS), collate_fn=collate_fn)
 
     # Define models and go to train/evaluate
     algo = trainer(output_dir, dataloader, dataset, clip_model, clip_tokenizer, clip_transform=None) 

@@ -234,6 +234,18 @@ class condGANTrainer(object):
         clip_model = self.clip_model
         clip_transform = self.clip_transform
 
+        device_ids = [i for i in range(torch.cuda.device_count())]
+        print("device_ids", device_ids)
+ 
+        netG = nn.DataParallel(netG, device_ids)
+        for i in range(len(netsD)):
+            netsD[i] = nn.DataParallel(netsD[i], device_ids)
+
+        clip_model.backbone.text_model = nn.DataParallel(clip_model.backbone.text_model, device_ids)
+        clip_model.backbone.vision_model = nn.DataParallel(clip_model.backbone.vision_model, device_ids)
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+
         avg_param_G = copy_G_params(netG)
         optimizerG, optimizersD = self.define_optimizers(netG, netsD)
         real_labels, fake_labels, match_labels = self.prepare_labels()
@@ -277,9 +289,12 @@ class condGANTrainer(object):
                 data = data_iter.next()
                 
                 # imgs, captions, cap_lens, class_ids, keys = prepare_data(data)
-                imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-                sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
+                # imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
+                # sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
+                
 
+                imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
+                sort_ind, sort_ind_2 = data
                 # attention mask
                 mask = captions['attention_mask']
                 mask_2 = captions_2['attention_mask']
@@ -497,7 +512,7 @@ class condGANTrainer(object):
                        print('cnt: ', cnt)
 
                     imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-                sort_ind, sort_ind_2 = prepare_data(data) 
+                sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
 
                     words_embs, sent_emb = clip_model.encode_text_verbose(captions)
                     words_embs, sent_emb = words_embs.detach(), sent_emb.detach()

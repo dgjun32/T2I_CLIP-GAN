@@ -167,18 +167,18 @@ def discriminator_loss(netD, real_imgs, fake_imgs, conditions,
     fake_features = netD(fake_imgs.detach())
     # loss
     #
-    cond_real_logits = netD.COND_DNET(real_features, conditions)
+    cond_real_logits = netD.module.COND_DNET(real_features, conditions)
     cond_real_errD = nn.BCELoss()(cond_real_logits, real_labels)
-    cond_fake_logits = netD.COND_DNET(fake_features, conditions)
+    cond_fake_logits = netD.module.COND_DNET(fake_features, conditions)
     cond_fake_errD = nn.BCELoss()(cond_fake_logits, fake_labels)
     #
     batch_size = real_features.size(0)
-    cond_wrong_logits = netD.COND_DNET(real_features[:(batch_size - 1)], conditions[1:batch_size])
+    cond_wrong_logits = netD.module.COND_DNET(real_features[:(batch_size - 1)], conditions[1:batch_size])
     cond_wrong_errD = nn.BCELoss()(cond_wrong_logits, fake_labels[1:batch_size])
 
-    if netD.UNCOND_DNET is not None:
-        real_logits = netD.UNCOND_DNET(real_features)
-        fake_logits = netD.UNCOND_DNET(fake_features)
+    if netD.module.UNCOND_DNET is not None:
+        real_logits = netD.module.UNCOND_DNET(real_features)
+        fake_logits = netD.module.UNCOND_DNET(fake_features)
         real_errD = nn.BCELoss()(real_logits, real_labels)
         fake_errD = nn.BCELoss()(fake_logits, fake_labels)
         errD = ((real_errD + cond_real_errD) / 2. +
@@ -200,10 +200,10 @@ def generator_loss(netsD, clip_model, fake_imgs, real_labels,
     errG_total = 0
     for i in range(numDs):
         features = netsD[i](fake_imgs[i])
-        cond_logits = netsD[i].COND_DNET(features, sent_emb)
+        cond_logits = netsD[i].module.COND_DNET(features, sent_emb)
         cond_errG = nn.BCELoss()(cond_logits, real_labels)
-        if netsD[i].UNCOND_DNET is  not None:
-            logits = netsD[i].UNCOND_DNET(features)
+        if netsD[i].module.UNCOND_DNET is  not None:
+            logits = netsD[i].module.UNCOND_DNET(features)
             errG = nn.BCELoss()(logits, real_labels)
             g_loss = errG + cond_errG
         else:
@@ -232,7 +232,7 @@ def generator_loss(netsD, clip_model, fake_imgs, real_labels,
             # im = Image.fromarray(im)
             # im.save("RESIZED.png")
             # raise Exception()
-            clip_resized = F.interpolate(fake_imgs[i], size=clip_model.backbone.vision_model.config.image_size)
+            clip_resized = F.interpolate(fake_imgs[i], size=clip_model.backbone.vision_model.module.config.image_size)
             region_features, image_encoding = clip_model.encode_image_verbose(clip_resized)
             region_features = region_features[:,:,1:].reshape(-1, 512, 7, 7)
     

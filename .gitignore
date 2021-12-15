@@ -10,3 +10,4 @@ DMGAN+CLIP/output/
 DMGAN+CLIP/output/
 __pycache__
 *.out
+*.pyc

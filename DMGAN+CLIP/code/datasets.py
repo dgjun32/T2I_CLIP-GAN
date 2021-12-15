@@ -39,25 +39,21 @@ def prepare_data(data, tokenizer):
     real_imgs = []
     for i in range(len(imgs)):
         imgs[i] = imgs[i][sorted_cap_indices]
-        if cfg.CUDA:
-            real_imgs.append(Variable(imgs[i]).cuda())
-        else:
-            real_imgs.append(Variable(imgs[i]))
 
+        real_imgs.append(Variable(imgs[i]))
+        
     real_imgs_2 = []
     for i in range(len(imgs_2)):
         imgs_2[i] = imgs_2[i][sorted_cap_indices_2]
-        if cfg.CUDA:
-            real_imgs_2.append(Variable(imgs_2[i]).cuda())
-        else:
-            real_imgs_2.append(Variable(imgs_2[i]))
+
+        real_imgs_2.append(Variable(imgs_2[i]))
 
     captions = tokenizer.batch_encode_plus(text_captions, padding = 'max_length', max_length = 77, return_tensors = 'pt')
-    captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze().cuda(),
-                'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze().cuda()}
+    captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze(),
+                'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze()}
     captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = 'max_length', max_length = 77, return_tensors = 'pt')
-    captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze().cuda(),
-                'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze().cuda()}
+    captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze(),
+                'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze()}
     # sorted_captions_lens_2 = captions_lens_2[sorted_cap_indices].squeeze()
 
     # captions = torch.cat([captions, captions_2], dim=0)
@@ -72,19 +68,12 @@ def prepare_data(data, tokenizer):
     # sent_indices = sent_indices[sorted_cap_indices]
     keys = [keys[i] for i in sorted_cap_indices.numpy()]
     # print('keys', type(keys), keys[-1])  # list
-    if cfg.CUDA:
-        sorted_cap_lens = Variable(sorted_cap_lens).cuda()
-        sorted_cap_lens_2 = Variable(sorted_cap_lens_2).cuda()
+    sorted_cap_lens = Variable(sorted_cap_lens)
+    sorted_cap_lens_2 = Variable(sorted_cap_lens_2)
 
-        sorted_cap_indices = sorted_cap_indices.cuda()
-        sorted_cap_indices_2 = sorted_cap_indices_2.cuda()       
-        
-    else:
-        captions = Variable(captions)
-        sorted_cap_lens = Variable(sorted_cap_lens)
-
-        captions_2 = Variable(captions_2)
-        sorted_cap_lens_2 = Variable(sorted_cap_lens_2)
+    sorted_cap_indices = sorted_cap_indices
+    sorted_cap_indices_2 = sorted_cap_indices_2      
+  
 
     return [real_imgs, real_imgs_2, captions, sorted_cap_lens,
             class_ids_1, keys, captions_2, sorted_cap_lens_2, class_ids_2, sorted_cap_indices, sorted_cap_indices_2]
