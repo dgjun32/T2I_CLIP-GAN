@@ -628,10 +628,9 @@ class TextDataset(data.Dataset):
         # caps, caps_two : natural language text caption
         # imgs : list containing image tensor
 
-
+    # sampling mismatching 99 captions 
     def get_mis_caption(self, cls_id):
         mis_match_captions_t = []
-        mis_match_captions = torch.zeros(99, cfg.TEXT.WORDS_NUM)
         mis_match_captions_len = torch.zeros(99)
         i = 0
         while len(mis_match_captions_t) < 99:
@@ -641,15 +640,15 @@ class TextDataset(data.Dataset):
             sent_ix = random.randint(0, self.embeddings_num)
             new_sent_ix = idx * self.embeddings_num + sent_ix
             caps_t, cap_len_t = self.get_caption(new_sent_ix)
-            mis_match_captions_t.append(torch.from_numpy(caps_t).squeeze())
+            mis_match_captions_t.append(caps_t)
             mis_match_captions_len[i] = cap_len_t
             i = i +1
-        sorted_cap_lens, sorted_cap_indices = torch.sort(mis_match_captions_len, 0, True)
+        #sorted_cap_lens, sorted_cap_indices = torch.sort(mis_match_captions_len, 0, True)
         #import ipdb
         #ipdb.set_trace()
-        for i in range(99):
-            mis_match_captions[i,:] = mis_match_captions_t[sorted_cap_indices[i]]
-        return mis_match_captions.type(torch.LongTensor).cuda(), sorted_cap_lens.type(torch.LongTensor).cuda()
+        #for i in range(99):
+        #    mis_match_captions[i,:] = mis_match_captions_t[sorted_cap_indices[i]]
+        return mis_match_captions_t
   
     
     def __len__(self):

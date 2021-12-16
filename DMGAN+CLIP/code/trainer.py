@@ -463,8 +463,9 @@ class condGANTrainer(object):
             ndarr = img.permute(1, 2, 0).data.cpu().numpy()
             im = Image.fromarray(ndarr)
             im.save(fullpath)
-
+    # function for generating samples given validation set & computing R-precision
     def sampling(self, split_dir):
+        # text&image encoder
         clip_model = self.clip_model
 
         if cfg.TRAIN.NET_G == '':
@@ -514,12 +515,12 @@ class condGANTrainer(object):
                     imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
                 sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
 
-                    words_embs, sent_emb = clip_model.encode_text_verbose(captions)
+                    words_embs, sent_emb = clip_model.encode_text_verbose(**captions)
                     words_embs, sent_emb = words_embs.detach(), sent_emb.detach()
-                    mask = (captions == 0)
-                    num_words = words_embs.size(2)
-                    if mask.size(1) > num_words:
-                        mask = mask[:, :num_words]
+                    mask = captions['attention_mask']
+                    #num_words = words_embs.size(2)
+                    #if mask.size(1) > num_words:
+                    #    mask = mask[:, :num_words]
 
                     #######################################################
                     # (2) Generate fake images
@@ -547,25 +548,31 @@ class condGANTrainer(object):
 
                     # fake_im = Image.fromarray(fake_imgs[-1])
                     # fake_im.save("FAKE.png")
+
+                    # Evaluating R-precision
                     clip_resized = F.interpolate(fake_imgs[-1], size=clip_model.backbone.vision_model.config.image_size)
                     # clip_resized = F.interpolate(fake_imgs[], size=clip_model.visual.input_resolution)
                     # clip_resized_im = Image.fromarray(clip_resized)
                     # clip_resized_im.save("RESIZED.png")
-
-                    _, cnn_code = clip_model.encode_image_verbose(clip_resized)
+ 
+                    _, img_code = clip_model.encode_image_verbose(pixel_values = clip_resized)
                     
                     
                     for i in range(batch_size):
-                        mis_captions, mis_captions_len = self.dataset.get_mis_caption(class_ids[i])
-
-                        _, sent_emb_t = clip_model.encode_text_verbose(mis_captions)
-                        rnn_code = torch.cat((sent_emb[i, :].unsqueeze(0), sent_emb_t), 0)
+                        # random sampling 99 mismatching captions
+                        mis_captions = self.dataset.get_mis_caption(class_ids[i])
+                        mis_captions = tokenizer.batch_encode_plus(mis_captions,
+                                                                padding = 'max_length',
+                                                                max_length = 77,
+                                                                return_tensors = 'pt')
+                        _, sent_emb_t = clip_model.encode_text_verbose(**mis_captions)
+                        sent_code = torch.cat((sent_emb[i, :].unsqueeze(0), sent_emb_t), 0)
                         ### cnn_code = 1 * nef
                         ### rnn_code = 100 * nef
-                        scores = torch.mm(cnn_code[i].unsqueeze(0), rnn_code.transpose(0, 1))  # 1* 100
-                        cnn_code_norm = torch.norm(cnn_code[i].unsqueeze(0), 2, dim=1, keepdim=True)
-                        rnn_code_norm = torch.norm(rnn_code, 2, dim=1, keepdim=True)
-                        norm = torch.mm(cnn_code_norm, rnn_code_norm.transpose(0, 1))
+                        scores = torch.mm(img_code[i].unsqueeze(0), sent_code.transpose(0, 1))  # 1* 100
+                        img_code_norm = torch.norm(img_code[i].unsqueeze(0), 2, dim=1, keepdim=True)
+                        sent_code_norm = torch.norm(sent_code, 2, dim=1, keepdim=True)
+                        norm = torch.mm(img_code_norm, sent_code_norm.transpose(0, 1))
                         scores0 = scores / norm.clamp(min=1e-8)
                         if torch.argmax(scores0) == 0:
                             R[R_count] = 1
@@ -584,7 +591,7 @@ class condGANTrainer(object):
 
 
 
-
+    # Function to generate sample given text captions
     def gen_example(self, data_dic):
         if cfg.TRAIN.NET_G == '':
             print('Error: the path for morels is not found!')
