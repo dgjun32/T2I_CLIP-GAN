@@ -11,3 +11,5 @@ DMGAN+CLIP/output/
 __pycache__
 *.out
 *.pyc
+runs
+core.*

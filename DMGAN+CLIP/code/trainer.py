@@ -32,6 +32,12 @@ from masks import mask_correlated_samples
 from nt_xent import NT_Xent
 
 
+def batch_to_device(somedict, device="cuda"):
+    for key, value in somedict.items():
+        if torch.is_tensor(value):
+            somedict[key] = value.to(device)
+    return somedict
+
 def l2norm(X, dim, eps=1e-8):
     """L2-normalize columns of X
     """
@@ -119,7 +125,12 @@ class condGANTrainer(object):
         if cfg.TRAIN.NET_G != '':
             state_dict = \
                 torch.load(cfg.TRAIN.NET_G, map_location=lambda storage, loc: storage)
-            netG.load_state_dict(state_dict)
+
+            new_loaded = dict()
+            for key, value in state_dict.items():
+                new_loaded[key.replace("module.", "")] = value
+            print("new_loaded", new_loaded.keys())
+            netG.load_state_dict(new_loaded)
             print('Load G from: ', cfg.TRAIN.NET_G)
             istart = cfg.TRAIN.NET_G.rfind('_') + 1
             iend = cfg.TRAIN.NET_G.rfind('.')
@@ -133,7 +144,12 @@ class condGANTrainer(object):
                     print('Load D from: ', Dname)
                     state_dict = \
                         torch.load(Dname, map_location=lambda storage, loc: storage)
-                    netsD[i].load_state_dict(state_dict)
+
+                    new_loaded = dict()
+                    for key, value in state_dict.items():
+                        new_loaded[key.replace("module.", "")] = value
+
+                    netsD[i].load_state_dict(new_loaded)
         # ########################################################### #
         if cfg.CUDA:
             netG.cuda()
@@ -479,8 +495,7 @@ class condGANTrainer(object):
             else:
                 netG = G_NET()
             netG.apply(weights_init)
-            netG.cuda()
-            netG.eval()
+            
 
             batch_size = self.batch_size
             nz = cfg.GAN.Z_DIM
@@ -490,8 +505,16 @@ class condGANTrainer(object):
             model_dir = cfg.TRAIN.NET_G
             state_dict = torch.load(model_dir, map_location=lambda storage, loc: storage)
             # state_dict = torch.load(cfg.TRAIN.NET_G)
-            netG.load_state_dict(state_dict)
+            new_loaded = dict()
+            for key, value in state_dict.items():
+                new_loaded[key.replace("module.", "")] = value
+
+            netG.load_state_dict(new_loaded)
             print('Load G from: ', model_dir)
+
+            netG.cuda()
+            netG.eval()
+
 
             # the path to save generated images
             s_tmp = model_dir[:model_dir.rfind('.pth')]
@@ -513,7 +536,8 @@ class condGANTrainer(object):
                        print('cnt: ', cnt)
 
                     imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-                sort_ind, sort_ind_2 = prepare_data(data, self.clip_tokenizer)
+                sort_ind, sort_ind_2 = data
+                    captions = batch_to_device(captions)
 
                     words_embs, sent_emb = clip_model.encode_text_verbose(**captions)
                     words_embs, sent_emb = words_embs.detach(), sent_emb.detach()
@@ -560,11 +584,9 @@ class condGANTrainer(object):
                     
                     for i in range(batch_size):
                         # random sampling 99 mismatching captions
-                        mis_captions = self.dataset.get_mis_caption(class_ids[i])
-                        mis_captions = tokenizer.batch_encode_plus(mis_captions,
-                                                                padding = 'max_length',
-                                                                max_length = 77,
-                                                                return_tensors = 'pt')
+                        mis_captions, captions_len = self.dataset.get_mis_caption(class_ids[i])
+                        mis_captions = batch_to_device(mis_captions)
+
                         _, sent_emb_t = clip_model.encode_text_verbose(**mis_captions)
                         sent_code = torch.cat((sent_emb[i, :].unsqueeze(0), sent_emb_t), 0)
                         ### cnn_code = 1 * nef

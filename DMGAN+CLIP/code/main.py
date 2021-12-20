@@ -140,11 +140,19 @@ if __name__ == "__main__":
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM - 1))
 
     clip_model = AddLinearOnCLIP()
+    
 
     if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
         # load pretrained CLIP
-        clip_model.load_state_dict(torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu"))
-        print(cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
+        print(clip_model)
+        loaded = torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu")
+
+        new_loaded = dict()
+        for key, value in loaded.items():
+            new_loaded[key.replace(".module", "")] = value
+
+        clip_model.load_state_dict(new_loaded)
+        print("LOADED:", cfg.TRAIN.CLIP_MODEL_CHECKPOINT)
     else: 
         clip_model.backbone = CLIPModel.from_pretrained(cfg.TRAIN.CLIP_MODEL_BASE)
 

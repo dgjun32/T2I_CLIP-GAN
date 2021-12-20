@@ -3,7 +3,7 @@ CONFIG_NAME: 'DMGAN'
 DATASET_NAME: 'birds'
 DATA_DIR: '../data/birds'
 GPU_ID: 0
-WORKERS: 2
+WORKERS: 0
 
 B_VALIDATION: True  # True  # False
 TREE:
@@ -12,9 +12,9 @@ TREE:
 
 TRAIN:
     FLAG: False
-    CLIP_MODEL_CHECKPOINT: "../output/pretrained/clip350.pth"
+    CLIP_MODEL_CHECKPOINT: "../output/birds_DMGAN_2021_12_20_04_59_44/Model/clip0.pth"
     CLIP_MODEL_BASE: "openai/clip-vit-base-patch32"
-    NET_G: '../output/birds_DMGAN_2021_11_07_07_47_39/Model/netG_epoch_400.pth'
+    NET_G: '../output/birds_DMGAN_2021_12_20_04_59_44/Model/netG_epoch_0.pth'
     B_NET_D: False
     BATCH_SIZE: 10
     # NET_E: '../DAMSMencoders/bird/text_encoder200.pth'

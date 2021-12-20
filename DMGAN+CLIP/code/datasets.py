@@ -640,15 +640,23 @@ class TextDataset(data.Dataset):
             sent_ix = random.randint(0, self.embeddings_num)
             new_sent_ix = idx * self.embeddings_num + sent_ix
             caps_t, cap_len_t = self.get_caption(new_sent_ix)
+
+            # mis_match_captions_t.append(torch.from_numpy(caps_t).squeeze())
             mis_match_captions_t.append(caps_t)
+
             mis_match_captions_len[i] = cap_len_t
             i = i +1
-        #sorted_cap_lens, sorted_cap_indices = torch.sort(mis_match_captions_len, 0, True)
-        #import ipdb
-        #ipdb.set_trace()
-        #for i in range(99):
-        #    mis_match_captions[i,:] = mis_match_captions_t[sorted_cap_indices[i]]
-        return mis_match_captions_t
+
+        sorted_cap_lens, sorted_cap_indices = torch.sort(mis_match_captions_len, 0, True)
+        mis_match_captions_t = self.clip_tokenizer.batch_encode_plus(mis_match_captions_t, padding = 'max_length', max_length = 77, return_tensors = 'pt')
+        mis_match_captions_t = {'input_ids' : mis_match_captions_t['input_ids'][sorted_cap_indices].squeeze(),
+            'attention_mask' : mis_match_captions_t['attention_mask'][sorted_cap_indices].squeeze()}
+
+        # for i in range(99):
+            # mis_match_captions[i,:] = mis_match_captions_t[sorted_cap_indices[i]]
+        # return mis_match_captions.type(torch.LongTensor).cuda(), sorted_cap_lens.type(torch.LongTensor).cuda()
+        return mis_match_captions_t, sorted_cap_lens.type(torch.LongTensor)
+  
   
     
     def __len__(self):
