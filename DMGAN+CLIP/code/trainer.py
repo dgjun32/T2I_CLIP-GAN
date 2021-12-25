@@ -110,6 +110,8 @@ class condGANTrainer(object):
             if cfg.TREE.BRANCH_NUM > 2:
                 netsD.append(D_NET256())
             # TODO: if cfg.TREE.BRANCH_NUM > 3:
+        
+        torch.save(netG.state_dict(), '/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/netG_init.pth')
 
         # print('number of trainable parameters =', count_parameters(netG))
         # print('number of trainable parameters =', count_parameters(netsD[-1]))
@@ -502,6 +504,7 @@ class condGANTrainer(object):
             noise = Variable(torch.FloatTensor(batch_size, nz), volatile=True)
             noise = noise.cuda()
 
+            # load trained generator network
             model_dir = cfg.TRAIN.NET_G
             state_dict = torch.load(model_dir, map_location=lambda storage, loc: storage)
             # state_dict = torch.load(cfg.TRAIN.NET_G)
@@ -509,6 +512,7 @@ class condGANTrainer(object):
             for key, value in state_dict.items():
                 new_loaded[key.replace("module.", "")] = value
 
+            # netG.load_state_dict(new_loaded)
             netG.load_state_dict(new_loaded)
             print('Load G from: ', model_dir)
 
