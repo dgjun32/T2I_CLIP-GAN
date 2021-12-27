@@ -43,23 +43,23 @@ Alternatively, another site is from [DM-GAN](https://github.com/MinfengZhu/DM-GA
 - With COCO2014 : ```$ python main.py --cfg cfg/clip_coco_DMGAN.yml --gpu 0```
 
 ## 6. Evaluation
-1. Generate fake images and compute ```R precision```
+1. Generate fake images and compute R precision
 
 - CUBS2011 : ```$ python main.py --cfg cfg/eval_clip_bird.yml```
 
 - COCO2014 : ```$ python main.py --cfg cfg/eval_clip_coco.yml```
 
-2. Compute ```FID(Frechet Inception Distance)``` 
+2. Compute FID(Frechet Inception Distance) 
 
 - CUBS2011 : ```$ python fid_score.py --data bird --dims 2048 --batch_size 32```
 
 - COCO2014 : ```$ python fid_score.py --data coco --dims 2048 --batch_size 32```
  
-3. Compute ```Inception score``` 
+3. Compute Inception score 
 
-- CUBS2011 :
+- CUBS2011 : ```$ python inception_score.py --data bird```
 
-- COCO2014 : 
+- COCO2014 : ```$ python inception_score.py --data coco```
 
 ## 7. Citation
 
