@@ -51,11 +51,15 @@ Alternatively, another site is from [DM-GAN](https://github.com/MinfengZhu/DM-GA
 
 2. Compute ```FID(Frechet Inception Distance)``` 
 
-- CUBS2011 : ```$ python fid_score.py --path ./CLIP+GAN/DMGAN+CLIP/output/netG_bird/valid/single/ ./CLIP+GAN/data/birds/test/ --dims 2048 --batch_size 32```
+- CUBS2011 : ```$ python fid_score.py --data bird --dims 2048 --batch_size 32```
 
-- COCO2014 : ```$ python fid_score.py --path ./CLIP+GAN/DMGAN+CLIP/output/netG_coco/valid/single/ ./CLIP+GAN/data/coco/val2014/ --dims 2048 --batch_size 32```
+- COCO2014 : ```$ python fid_score.py --data coco --dims 2048 --batch_size 32```
  
-3. Compute ```Inception score``` : 
+3. Compute ```Inception score``` 
+
+- CUBS2011 :
+
+- COCO2014 : 
 
 ## 7. Citation
 

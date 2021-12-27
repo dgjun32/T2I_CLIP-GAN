@@ -30,9 +30,8 @@ parser.add_argument('--dims', type=int, default=2048,
                     choices=list(InceptionV3.BLOCK_INDEX_BY_DIM),
                     help=('Dimensionality of Inception features to use. '
                           'By default, uses pool3 features'))
-parser.add_argument('path', type=str, nargs=2,
-                    help=('Paths to the generated images or '
-                          'to .npz statistic files'))
+parser.add_argument('--data', type=str,
+                    help=('type of dataset'))
 
 IMAGE_EXTENSIONS = {'bmp', 'jpg', 'jpeg', 'pgm', 'png', 'ppm',
                     'tif', 'tiff', 'webp'}
@@ -236,8 +235,11 @@ def main():
         num_workers = min(num_avail_cpus, 8)
     else:
         num_workers = args.num_workers
-
-    fid_value = calculate_fid_given_paths(args.path,
+    if args.data == 'bird':
+        paths = ['../output/netG_bird/valid/single/', '../data/birds/test/']
+    else:
+        paths = ['../output/netG_coco/valid/single/', '../data/coco/val2014/']
+    fid_value = calculate_fid_given_paths(paths,
                                           args.batch_size,
                                           device,
                                           args.dims,
