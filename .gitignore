@@ -1,13 +1,9 @@
 data/birds/
 data/coco/
-AttnGAN+CLIP/data/birds/
-AttnGAN+CLIP/data/coco/
 DMGAN+CLIP/data/birds/
 DMGAN+CLIP/data/coco/
-AttnGAN+CLIP/output/
-AttnGAN+CLIP/output/
 DMGAN+CLIP/output/
-DMGAN+CLIP/output/
+DMGAN+CLIP/models/
 __pycache__
 *.out
 *.pyc

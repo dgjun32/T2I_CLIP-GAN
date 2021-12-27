@@ -12,11 +12,11 @@ TREE:
 
 TRAIN:
     FLAG: False
-    CLIP_MODEL_CHECKPOINT: "../output/birds_DMGAN_2021_12_20_04_59_44/Model/clip0.pth"
+    CLIP_MODEL_CHECKPOINT: "../output/birds_DAMSM_CLIP/Model/clip45.pth"
     CLIP_MODEL_BASE: "openai/clip-vit-base-patch32"
-    NET_G: '/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/netG_init.pth' # '../output/birds_DMGAN_2021_12_20_04_59_44/Model/netG_epoch_0.pth'
+    NET_G: '../models/netG_bird.pth' # '../output/birds_DMGAN_2021_12_20_04_59_44/Model/netG_epoch_0.pth'
     B_NET_D: False
-    BATCH_SIZE: 2
+    BATCH_SIZE: 10
     # NET_E: '../DAMSMencoders/bird/text_encoder200.pth'
 
 

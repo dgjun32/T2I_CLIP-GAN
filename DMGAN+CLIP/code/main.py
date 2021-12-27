@@ -144,7 +144,6 @@ if __name__ == "__main__":
 
     if os.path.exists(cfg.TRAIN.CLIP_MODEL_CHECKPOINT):
         # load pretrained CLIP
-        print(clip_model)
         loaded = torch.load(cfg.TRAIN.CLIP_MODEL_CHECKPOINT, map_location="cpu")
 
         new_loaded = dict()

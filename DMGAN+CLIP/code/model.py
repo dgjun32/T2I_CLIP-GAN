@@ -56,7 +56,6 @@ class AddLinearOnCLIP(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):  
-        print(input_ids.shape)
         text_outputs = self.backbone.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,

@@ -36,7 +36,12 @@ def inception_score(path, cuda=True, batch_size=32, resize=False, splits=1):
     batch_size -- batch size for feeding into Inception v3
     splits -- number of splits
     """
-    files = os.listdir(path)
+    files = []
+    mid_files = os.listdir(path)
+    for dir in mid_files:
+        files_li = os.listdir(dir)
+        files += files_li
+        
     N = len(files)
     assert batch_size > 0
     assert N > batch_size
@@ -101,9 +106,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.data == bird:
-        path = '../output/netG_bird/valid/single/'
+        path = '../models/netG_bird/valid/single/'
     else:
-        path = '../output/netG_coco/valid/single/'
+        path = '../models/netG_coco/valid/single/'
     print ("Calculating Inception Score...")
     mu, std = inception_score(path, cuda=True, batch_size=32, resize=True, splits=10)
     print ('scores mean : {} | scores std : {}'.format(mu, std))

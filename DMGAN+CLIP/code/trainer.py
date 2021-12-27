@@ -513,7 +513,6 @@ class condGANTrainer(object):
                 new_loaded[key.replace("module.", "")] = value
 
             # netG.load_state_dict(new_loaded)
-            netG.load_state_dict(new_loaded)
             print('Load G from: ', model_dir)
 
             netG.cuda()
@@ -561,15 +560,14 @@ class condGANTrainer(object):
                         if not os.path.isdir(folder):
                             #print('Make a new folder: ', folder)
                             mkdir_p(folder)
-                        k = -1
                         # for k in range(len(fake_imgs)):
-                        im = fake_imgs[k][j].data.cpu().numpy()
+                        im = fake_imgs[-1][j].data.cpu().numpy()
                         # [-1, 1] --> [0, 255]
                         im = (im + 1.0) * 127.5
                         im = im.astype(np.uint8)
                         im = np.transpose(im, (1, 2, 0))
                         im = Image.fromarray(im)
-                        fullpath = '%s_s%d_%d.png' % (s_tmp, k, ii)
+                        fullpath = '%s_%d.png' % (s_tmp, ii)
                         im.save(fullpath)
 
                     # _, cnn_code = image_encoder(fake_imgs[-1])

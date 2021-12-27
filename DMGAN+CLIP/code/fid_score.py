@@ -236,9 +236,9 @@ def main():
     else:
         num_workers = args.num_workers
     if args.data == 'bird':
-        paths = ['../output/netG_bird/valid/single/', '../data/birds/test/']
+        paths = ['../models/netG_bird/valid/single/', '../data/birds/CUBS_200_2011/images']
     else:
-        paths = ['../output/netG_coco/valid/single/', '../data/coco/val2014/']
+        paths = ['../models/netG_coco/valid/single/', '../data/coco/val2014/']
     fid_value = calculate_fid_given_paths(paths,
                                           args.batch_size,
                                           device,
