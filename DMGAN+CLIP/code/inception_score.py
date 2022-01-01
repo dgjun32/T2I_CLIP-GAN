@@ -8,8 +8,11 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 import torch.utils.data
 
+import torchvision
 from torchvision.models.inception import inception_v3
 import torchvision.transforms as transforms
+import PIL
+from PIL import Image
 
 import numpy as np
 from scipy.stats import entropy
@@ -39,9 +42,10 @@ def inception_score(path, cuda=True, batch_size=32, resize=False, splits=1):
     files = []
     mid_files = os.listdir(path)
     for dir in mid_files:
-        files_li = os.listdir(dir)
+        files_li = os.listdir(os.path.join(path, dir))
+        files_li = list(map(lambda x : os.path.join(path, dir, x), files_li))
         files += files_li
-        
+    print(files[30])
     N = len(files)
     assert batch_size > 0
     assert N > batch_size
@@ -55,12 +59,12 @@ def inception_score(path, cuda=True, batch_size=32, resize=False, splits=1):
         dtype = torch.FloatTensor
 
     # Set up dataloader
-    transforms = transforms.Compose([
+    transform = torchvision.transforms.Compose([
         transforms.Scale(32),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
-    dataset = ImagePathDataset(files, transforms = transforms)
+    dataset = ImagePathDataset(files, transforms = transform)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size = batch_size)
     # dataloader = torch.utils.data.DataLoader(imgs, batch_size=batch_size)
 
@@ -105,7 +109,7 @@ if __name__ == '__main__':
                     help='dataset name')
     args = parser.parse_args()
     
-    if args.data == bird:
+    if args.data == 'bird':
         path = '../models/netG_bird/valid/single/'
     else:
         path = '../models/netG_coco/valid/single/'
