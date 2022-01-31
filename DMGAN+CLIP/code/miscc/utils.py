@@ -12,54 +12,99 @@ import skimage.transform
 
 from miscc.config import cfg
 
-
 # For visualization ################################################
-COLOR_DIC = {0:[128,64,128],  1:[244, 35,232],
-             2:[70, 70, 70],  3:[102,102,156],
-             4:[190,153,153], 5:[153,153,153],
-             6:[250,170, 30], 7:[220, 220, 0],
-             8:[107,142, 35], 9:[152,251,152],
-             10:[70,130,180], 11:[220,20, 60],
-             12:[255, 0, 0],  13:[0, 0, 142],
-             14:[119,11, 32], 15:[0, 60,100],
-             16:[0, 80, 100], 17:[0, 0, 230],
-             18:[0,  0, 70],  19:[0, 0,  0]}
+COLOR_DIC_OLD = {
+    0:[128,64,128],  
+    1:[244, 35,232],
+    2:[70, 70, 70],  
+    3:[102,102,156],
+    4:[190,153,153], 
+    5:[153,153,153],
+    6:[250,170, 30], 
+    7:[220, 220, 0],
+    8:[107,142, 35], 
+    9:[152,251,152],
+    10:[70,130,180], 
+    11:[220,20, 60],
+    12:[255, 0, 0],  
+    13:[0, 0, 142],
+    14:[119,11, 32], 
+    15:[0, 60,100],
+    16:[0, 80, 100], 
+    17:[0, 0, 230],
+    18:[0,  0, 70],  
+    19:[0, 0,  0]
+}
+
+COLOR_DIC = {}
+for key, item in COLOR_DIC_OLD.items():
+    key = key * 4
+    COLOR_DIC[key] = item
+    COLOR_DIC[key+1] = item
+    COLOR_DIC[key+2] = item
+    COLOR_DIC[key+3] = item
+
+COLOR_DIC[19 * 4 + 1] = item
+COLOR_DIC[19 * 4 + 2] = item
+COLOR_DIC[19 * 4 + 3] = item
+COLOR_DIC[19 * 4 + 4] = item
 FONT_MAX = 50
 
 
-def drawCaption(convas, captions, ixtoword, vis_size, off1=2, off2=2):
-    num = captions.size(0)
+def drawCaption(convas, captions, vis_size, off1=2, off2=2, tokenizer=None):
+    '''
+    Parameters:
+        convas : np.ndarray
+        captions : Dict[torch.LongTensor]
+        tokenizer : CLIPTokenizer
+    Returns:
+        img_txt : PIL image 
+        sentence_list : List[List length of words_num] length of batch_size  
+    '''
+    num = captions["input_ids"].size(0)
     img_txt = Image.fromarray(convas)
     # get a font
-    # fnt = None  # ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
-    fnt = ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
+    fnt = None  # ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
+    # fnt = ImageFont.truetype('Pillow/Tests/fonts/FreeMono.ttf', 50)
     # get a drawing context
     d = ImageDraw.Draw(img_txt)
     sentence_list = []
+    print("num", num)
     for i in range(num):
-        cap = captions[i].data.cpu().numpy()
+        # cap = captions[i].data.cpu().numpy()
+        cap = captions["input_ids"][i]
         sentence = []
         for j in range(len(cap)):
-            if cap[j] == 0:
-                break
-            word = ixtoword[cap[j]].encode('ascii', 'ignore').decode('ascii')
+            word = tokenizer.decode([cap[j]])
+            # print("word", word)
+            word = word.encode('ascii', 'ignore').decode('ascii')
             d.text(((j + off1) * (vis_size + off2), i * FONT_MAX), '%d:%s' % (j, word[:6]),
-                   font=fnt, fill=(255, 255, 255, 255))
+                    fill=(255, 255, 255, 255))
             sentence.append(word)
         sentence_list.append(sentence)
     return img_txt, sentence_list
 
 
-def build_super_images(real_imgs, captions, ixtoword,
-                       attn_maps, att_sze, lr_imgs=None,
-                       batch_size=cfg.TRAIN.BATCH_SIZE,
-                       max_word_num=cfg.TEXT.WORDS_NUM):
+
+
+def build_super_images(
+    input_images, 
+    captions,
+    attn_maps, 
+    att_sze, 
+    lr_imgs=None,
+    batch_size=cfg.TRAIN.BATCH_SIZE,
+    max_word_num=cfg.TEXT.WORDS_NUM, 
+    tokenizer=None
+):
     nvis = 8
     real_imgs = real_imgs[:nvis]
     if lr_imgs is not None:
         lr_imgs = lr_imgs[:nvis]
     if att_sze == 17:
         vis_size = att_sze * 16
+    if att_sze == 7:
+        vis_size = att_sze * 7
     else:
         vis_size = real_imgs.size(2)
 
@@ -99,7 +144,7 @@ def build_super_images(real_imgs, captions, ixtoword,
     num = nvis  # len(attn_maps)
 
     text_map, sentences = \
-        drawCaption(text_convas, captions, ixtoword, vis_size)
+        drawCaption(text_convas, captions, ixtoword, vis_size, tokenizer=tokenizer)
     text_map = np.asarray(text_map).astype(np.uint8)
 
     bUpdate = 1
@@ -280,8 +325,6 @@ def build_super_images2(real_imgs, captions, cap_lens, ixtoword,
         return img_set, sentences
     else:
         return None
-
-
 ####################################################################
 def weights_init(m):
     # orthogonal_

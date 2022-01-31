@@ -13,17 +13,15 @@ TREE:
 
 TRAIN:
     FLAG: True
-    NET_E: ''  # '../DAMSMencoders/coco/text_encoder100.pth'
+    NET_E: ''  # '../DAMSMencoders/bird/text_encoder200.pth'
     BATCH_SIZE: 48
     MAX_EPOCH: 100
     SNAPSHOT_INTERVAL: 1
-    BACKBONE_LR: 0.00002  # 0.0002best; 0.002good
-    LINEAR_LR: 0.002
-    T_0 : 10
-    T_up : 5
-    T_mult : 1
-    gamma : 0.8
-    init_lr : 0.0000001
+    BACKBONE_LR: 0.0002  # 0.0002best; 0.002good
+    LINEAR_LR: 20.0
+    BASE_LR: 0.00000001
+    GAMMA: 0.8
+    STEP_SIZE_UP: 16
     RNN_GRAD_CLIP: 0.25
     SMOOTH:
         GAMMA1: 4.0  # 1,2,5 good 4 best  10&100bad

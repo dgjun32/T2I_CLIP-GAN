@@ -10,6 +10,13 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
 # import torchvision.transforms.functional.normalize as TF
+def l2norm(X, dim, eps=1e-8):
+    """L2-normalize columns of X
+    """
+    norm = torch.pow(X, 2).sum(dim=dim, keepdim=True).sqrt() + eps
+    X = torch.div(X, norm)
+    return X
+
 
 def forward(clip_model, image, text):
     image_features = clip_model.encode_image(image)
@@ -84,79 +91,185 @@ def sent_loss(cnn_code, rnn_code, labels, class_ids,
     return loss0, loss1
 
 
-def words_loss(img_features, words_emb, labels,
-               cap_lens, class_ids, batch_size):
+# text-image similarity module(for computing word_loss)
+def similarity_text_image(words_emb, region_features, words_mask, gamma1, gamma2):
     """
-        words_emb(query): batch x nef x seq_len
-        img_features(context): batch x nef x 7 x 7
+    Calculates the 1-1 similarity between words_emb and region_features.
+    
+    words_emb(query): batch_size x emb_size x n_words(30-1) 
+    words_mask: batch_size x n_words(30-1) x 1
+    region_features(context): batch_size x emb_size x n_patches(49)
+    """
+    batch_size, emb_size, n_words = words_emb.size()
+    batch_size, emb_size, n_patches = region_features.size()
+    assert words_mask.size() == (batch_size, n_words, 1)
+
+    
+    '''FROM PAPER
+    We first calculate the similarity matrix for all possible
+    pairs of words in the sentence and sub-regions in the image 
+    29 words, 49 patches for a total of 49 * 29 similarity scores.
+    '''
+    contextT = torch.transpose(region_features, 1, 2).contiguous() # shape of (batch_size, 49, 512)     
+    queryT = torch.transpose(words_emb, 1, 2).contiguous() # shape of (batch_size, 29, 512)
+    contextT = l2norm(contextT, dim=2)
+    queryT = l2norm(queryT, dim=2)
+    sim_scores = torch.bmm(queryT, torch.transpose(contextT, 1, 2)) # shape of (batch_size, 29, 49)
+    assert sim_scores.size() == (batch_size, n_words, n_patches)
+    '''NOT FROM PAPER
+    We should be masking out the similarity scores corresponding to padding tokens.
+    
+        sim_scores.shape == [batch_size, n_words, n_patches]
+        words_mask.shape == [batch_size, n_words, 1]
+    '''
+    
+
+    sim_scores = sim_scores.masked_fill_((words_mask == 0).cuda(), -float("inf")) # mask out padding tokens
+    
+    '''
+    TEST: 1. The similarity scores between ith word and jth patch is set to -inf if
+    ith word is a padding
+    '''
+    one_mask = words_mask[0]
+    one_scores = sim_scores[0] 
+    for m, s in zip(one_mask, one_scores):
+        if m == 0.0:
+            assert s[0] == -float("inf")
+    
+    '''FROM PAPER
+    We find that it is beneficial to normalize the
+    similarity matrix as follows (softmax)
+    '''
+    sim_scores = torch.transpose(sim_scores, 1, 2) # shape of (batch_size, 49, 29)
+    sm_sim_scores = nn.functional.softmax(sim_scores, dim=-1)
+    assert torch.isclose(torch.sum(sm_sim_scores[0][0]), torch.tensor([1.0]).to(sm_sim_scores.get_device()), rtol=1e-5) 
+    
+    '''
+    sim_scores.shape == [batch_size, n_patches, n_words]
+    '''
+    
+    '''
+    TEST 2. The similarity scores between the ith word and the kth patch is set to 0 if it's padding.
+    sim_scores.shape == [batch_size, n_patches, n_words], so let's just consider one patch.
+    '''
+    one_mask = words_mask[0]
+    one_scores = sm_sim_scores[0][0] # one patch
+    for m, s in zip(one_mask, one_scores):
+        if m == 0.0:
+            assert s == 0.0
+
+    '''FROM PAPER
+    Then, we build an attention model to compute a region-context vector for each word (query). 
+    The region-context vector ci is a dynamic representation of the image's subregions related to the 
+    ith word of the sentence. It is computed as the weighted sum over all regional visual vectors.
+
+    ci = sum(alpha_ij * v_j) from j = 0 to j = 49 where 
+        alpha_j = sim score of ith word with jth patch
+        v_j = embedding for jth patch
+    '''
+
+    # sm_sim_scores.size() == [10, 49, 29]
+    # contextT.size() == [10, 49, 512]
+    scores_for_rc_vector = gamma1 * sm_sim_scores
+    scores_for_rc_vector = nn.functional.softmax(scores_for_rc_vector, dim=1)
+    assert torch.isnan(scores_for_rc_vector).sum() == 0
+    scores_for_rc_vector = scores_for_rc_vector.permute(0, 2, 1) # [10, 29, 49]
+    '''
+    scores_for_rc_vector.shape == [batch_size, n_words, n_patches]
+    '''
+
+    # region_context_rc_vector.size() == [10, 29, 512]
+    region_context_vectors = torch.bmm(scores_for_rc_vector, contextT)
+    assert torch.isnan(region_context_vectors).sum() == 0
+    '''FROM PAPER
+    Finally, we define the relevance between the 
+    ith word and the image using the cosine similarity between ci and ei.
+
+    R(ci, ei) = cossim(ci, ei)
+
+    Inspired by the minimum classification error formulation in speech recognitioregion_context_vectorsn
+    (see, e.g., [11, 8]), the attention-driven image-text matching score between the 
+    entire image (Q) and the whole text description (D) is defined as
+
+    [refer to paper]
+    R(Q, D) = ...
+    '''
+    cossim = torch.nn.CosineSimilarity(dim=2, eps=1e-6)
+    R_ci_ei = cossim(region_context_vectors, queryT) # shape of (batch_size*n_words, batch_size*n_words)
+    R_QD = R_ci_ei * gamma2
+    R_QD = R_QD.exp_()
+    R_QD = R_QD.sum(dim=1)
+    R_QD = torch.pow(R_QD, (1 / gamma2))
+    R_QD = torch.log(R_QD)
+    
+    '''
+    In Summary,
+    
+    sm_sim_scores                ([batch_size, n_patches, n_words])
+        for each patch, the attn scores across the full sequence
+    region_context_vectors       ([batch_size, n_words, emb_size])
+        for each word, the weighted sum of all the patch embeddings
+        i.e. a full image embedding corresponding to each "word"
+    R_QD                         ([batch_size])
+        Similarity score for ith text with ith image for all i in range(batch_size)
+    '''
+    return sm_sim_scores, region_context_vectors,  R_QD
+
+
+def words_loss(region_features, words_embs, match_labels, cap_lens, class_ids, batch_size, words_mask, gamma1, gamma2, gamma3):
+    """
+        words_emb(query): batch_size x emb_size x n_words
+        region_features(context): batch_size x emb_size x n_patches
     """
     masks = []
-    att_maps = []
+    attn_maps = []
     similarities = []
     cap_lens = cap_lens.data.tolist()
     for i in range(batch_size):
         if class_ids is not None:
-            mask = (class_ids == class_ids[i]).astype(np.uint8)
-            mask[i] = 0
-            masks.append(mask.reshape((1, -1)))
+            classmask = (class_ids == class_ids[i]).astype(np.uint8)
+            classmask[i] = 0
+            masks.append(classmask.reshape((1, -1)))
         # Get the i-th text description
-        words_num = cap_lens[i]
-        # -> 1 x nef x words_num
-        word = words_emb[i, :, :words_num].unsqueeze(0).contiguous()
-        # -> batch_size x nef x words_num
+        word = words_embs[i].unsqueeze(0).contiguous()
         word = word.repeat(batch_size, 1, 1)
-        # batch x nef x 49
-        context = img_features.reshape(batch_size, 512, 49)
-        """
-            word(query): batch x nef x words_num
-            context: batch x nef x 7*7
-            weiContext: batch x nef x words_num
-            attn: batch x words_num x 7 x 7
-        """
-        weiContext, attn = func_attention(word, context, cfg.TRAIN.SMOOTH.GAMMA1)
-        att_maps.append(attn[i].unsqueeze(0).contiguous())
-        # --> batch_size x words_num x nef
-        word = word.transpose(1, 2).contiguous()
-        weiContext = weiContext.transpose(1, 2).contiguous()
-        # --> batch_size*words_num x nef
-        word = word.view(batch_size * words_num, -1)
-        weiContext = weiContext.view(batch_size * words_num, -1)
-        #
-        # -->batch_size*words_num
-        row_sim = cosine_similarity(word, weiContext)
-        # --> batch_size x words_num
-        row_sim = row_sim.view(batch_size, words_num)
+        word_mask = words_mask[i].contiguous()
+        word_mask = word_mask.repeat(batch_size, 1)
+        word_mask = word_mask.unsqueeze(-1)
+        context = region_features
+        
+        # attn, rc_vectors, R_QD between i th text and all images
+        attn, rc_vectors, R_QD = similarity_text_image(
+            word, 
+            context, 
+            word_mask, 
+            gamma1, 
+            gamma2
+        )
+        attn_maps.append(attn)
+        # sim of all the images in the batch against one text description
+        similarities.append(R_QD)
+    
+    # similarities[i][j] = similarity(text_i, image_j)
+    similarities = torch.stack(similarities) * gamma3
 
-        # Eq. (10)
-        row_sim.mul_(cfg.TRAIN.SMOOTH.GAMMA2).exp_()
-        row_sim = row_sim.sum(dim=1, keepdim=True)
-        row_sim = torch.log(row_sim)
-
-        # --> 1 x batch_size
-        # similarities(i, j): the similarity between the i-th image and the j-th text description
-        similarities.append(row_sim)
-
-    # batch_size x batch_size
-    similarities = torch.cat(similarities, 1)
     if class_ids is not None:
         masks = np.concatenate(masks, 0)
-        # masks: batch_size x batch_size
-        # masks = torch.ByteTensor(masks)
         masks = torch.BoolTensor(masks)
-
         if cfg.CUDA:
             masks = masks.cuda()
-
-    similarities = similarities * cfg.TRAIN.SMOOTH.GAMMA3
+    # if there are overlapping labels within batch
     if class_ids is not None:
         similarities.data.masked_fill_(masks, -float('inf'))
+        
     similarities1 = similarities.transpose(0, 1)
-    if labels is not None:
-        loss0 = nn.CrossEntropyLoss()(similarities, labels)
-        loss1 = nn.CrossEntropyLoss()(similarities1, labels)
+
+    if match_labels is not None:
+        loss0 = nn.CrossEntropyLoss()(similarities, match_labels)
+        loss1 = nn.CrossEntropyLoss()(similarities1, match_labels)
     else:
         loss0, loss1 = None, None
-    return loss0, loss1, att_maps
+    return loss0, loss1, attn_maps
 
 
 # ##################Loss for G and Ds##############################

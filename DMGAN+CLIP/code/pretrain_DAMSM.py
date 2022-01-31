@@ -19,7 +19,9 @@ import dateutil.tz
 import argparse
 import numpy as np
 from PIL import Image
+import cv2
 import tensorboardX
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -32,15 +34,6 @@ import transformers
 from masks import mask_correlated_samples_2
 from nt_xent import NT_Xent
 
-# pretrained CLIP
-from clip.model import CLIP
-from clip.model import build_clip
-from clip.clip_api import tokenize
-
-# Logger
-from tensorboardX import SummaryWriter
-
-summary = SummaryWriter()
 UPDATE_INTERVAL = 50
 
 def l2norm(X, dim, eps=1e-8):
@@ -62,9 +55,33 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+def rm_special_token(mask, words_emb):
+    '''
+    words_emb : torch.FloatTensor shape of (batch_size, 30, 512)
+    mask : torch.BoolTensor shape of (batch_size, 30)
+    '''
+    batch_size, n_words, emb = words_emb.size()
+    words_emb_new, mask_new = [], []
+    for i in range(batch_size):
+        if torch.sum(mask[i]) == n_words:
+            emb = words_emb[i,1:-1,:]
+            m = mask[i,1:-1]
+        else:
+            eos_idx = torch.where(mask[i]==0)[0].min()
+            emb = words_emb[i]
+            emb = torch.cat([emb[1:(eos_idx-1),:], emb[eos_idx:]], dim=0)
+            m = mask[i]
+            m = torch.cat([m[1:(eos_idx-1)], m[eos_idx:]], dim=0)
+        words_emb_new.append(emb)
+        mask_new.append(m)
+    words_emb_new = torch.stack(words_emb_new, dim=0)
+    mask_new = torch.stack(mask_new, dim=0)
+    return words_emb_new, mask_new    
 
-def train(dataloader, clip, batch_size,
-          labels, backbone_optimizer, linear_optimizer, epoch, ixtoword, image_dir, criterion, tokenizer):
+
+def train(dataloader, clip, batch_size, labels,
+        backbone_optimizer, linear_optimizer,
+        epoch, ixtoword, image_dir, criterion, tokenizer):
     clip.train()
     s_total_loss0 = 0
     s_total_loss1 = 0
@@ -76,7 +93,6 @@ def train(dataloader, clip, batch_size,
 
     for step, data in enumerate(dataloader, 0):
         # data : imgs = [image tensor], caps, caps_len, cls_id, key, caps_2, caps_len_2
-
         # print('step', step)
         clip.zero_grad()
 
@@ -84,11 +100,16 @@ def train(dataloader, clip, batch_size,
         #     class_ids, keys = prepare_data(data)
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-        sort_ind, sort_ind_2 = prepare_data(data, tokenizer) # data.cuda()
+        sort_ind, sort_ind_2 = prepare_data(data, tokenizer, words_num=30) # data.cuda()
         '''
         imgs : list containing image tensor
         captions : dict containig input_ids and attention_mask
         '''
+
+        # words_mask
+        words_mask = captions['attention_mask']
+        words_mask_2 = captions_2['attention_mask']
+
         # extract image and text features
         sent_code, subr_feature, sent_emb, words_emb = clip(**captions, pixel_values = imgs[0])
         sent_code_2, subr_feature_2, sent_emb_2, words_emb_2 = clip(**captions_2, pixel_values = imgs_2[0])
@@ -100,21 +121,27 @@ def train(dataloader, clip, batch_size,
         batch_size = words_emb.shape[0]
 
         # transform tensors
-        words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
-        words_features_2 = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
-        words_emb = words_emb.permute(0,2,1)
+        ## remove <sos> image token
+        words_features = subr_feature[:,1:,:].permute(0,2,1) # shape of (batch_size, emb, n_patches)
+        words_features_2 = subr_feature[:,1:,:].permute(0,2,1)
+        ## remove <sos>,<eos> image token from words_emb, words_mask
+        words_emb, words_mask = rm_special_token(words_mask, words_emb)
+        words_emb_2, words_mask_2 = rm_special_token(words_mask_2, words_emb_2)
+        words_emb = words_emb.permute(0,2,1) # shape of (batch_size, emb, n_words)
         words_emb_2 = words_emb_2.permute(0,2,1)
         
         # compute loss
         ## word - subregion level attention loss
         w_loss0, w_loss1, attn_maps = words_loss(words_features, words_emb, labels,
-                                                 cap_lens, class_ids, batch_size)
+                                                cap_lens, class_ids, batch_size,
+                                                words_mask, cfg.TRAIN.SMOOTH.GAMMA1, cfg.TRAIN.SMOOTH.GAMMA2, cfg.TRAIN.SMOOTH.GAMMA3)
         w_total_loss0 += w_loss0.data
         w_total_loss1 += w_loss1.data
         loss = w_loss0 + w_loss1
 
         w2_loss0, w2_loss1, attn_maps_2 = words_loss(words_features_2, words_emb_2, labels,
-                                                 cap_lens_2, class_ids_2, batch_size)
+                                                 cap_lens_2, class_ids_2, batch_size,
+                                                 words_mask_2, cfg.TRAIN.SMOOTH.GAMMA1, cfg.TRAIN.SMOOTH.GAMMA2, cfg.TRAIN.SMOOTH.GAMMA3)
         w_total_loss0 += w2_loss0.data
         w_total_loss1 += w2_loss1.data
         loss += w2_loss0 + w2_loss1
@@ -159,7 +186,6 @@ def train(dataloader, clip, batch_size,
         # print(l2_loss)
 
         # loss += l2_loss
-
         loss.backward()
         #
         # `clip_grad_norm` helps prevent
@@ -202,8 +228,49 @@ def train(dataloader, clip, batch_size,
             #     im.save(fullpath)
     return count, loss
 
+def build_super_images3(epoch, input_images, captions, attn_maps, tokenizer):
+    '''
+    input_images : normalized torch.FloatTensor shape of (batch_size, 3, 224, 224)
+    captions : torch.LongTensor shape of (batch_size, 30)
+    attn_maps : torch.FloatTensor shape of (batch_size, 49, 28)
+    '''
+    batch_size, n_patches, n_words = attn_maps.shape
+    batch_size, _, img_size, img_size = input_images.shape
+    n_grid = int(math.sqrt(n_patches))
+    captions = captions[:,1:]
+    inv_norm = transforms.Compose([
+        transforms.Normalize(mean=[0.,0.,0.], std=[1/0.26862954, 1/0.26130258, 1/0.27577711]),
+        transforms.Normalize(mean=[-0.48145466, -0.4578275, -0.40821073], std=[1.,1.,1.])
+    ])
 
-def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
+    fig = plt.figure(figsize = (n_words, batch_size*1.5))
+    i = 1
+    for b in range(batch_size):
+        im = inv_norm(input_images[b]).permute(1,2,0).to('cpu').numpy()
+        #im = np.uint8(255*im)
+        for w in range(n_words):
+            word = tokenizer.decode(captions[b,w]).encode('ascii','ignore').decode('ascii')
+            if word == '<|endoftext|>':
+                wd = '!'
+            else:
+                wd = word
+            attn_map = attn_maps[b,:,w].reshape(n_grid, n_grid).unsqueeze(0).unsqueeze(0)
+            attn_map = nn.Upsample(scale_factor=32)(attn_map)
+            attn_map = attn_map[0].permute(1,2,0).to('cpu').numpy()
+            # attn_map = cv2.applyColorMap(attn_map, cv2.COLORMAP_JET)
+            result = attn_map + im
+            # result = (result-np.min(result)) / (np.max(result)-np.min(result))
+            # drawing img+attnmap on figure
+            plt.subplot(batch_size, n_words, i)
+            plt.imshow(result)
+            plt.title(wd)
+            plt.xticks([])
+            plt.yticks([])
+            i+=1
+    return fig
+
+
+def evaluate(dataloader, clip, batch_size, criterion, tokenizer, epoch, cfg):
     clip.eval()
     s_total_loss = 0
     w_total_loss = 0
@@ -212,25 +279,56 @@ def evaluate(dataloader, clip, batch_size, criterion, tokenizer):
         #         class_ids, keys = prepare_data(data)
 
         imgs, imgs_2, captions, cap_lens, class_ids, keys, captions_2, cap_lens_2, class_ids_2, \
-        sort_ind, sort_ind_2 = prepare_data(data, tokenizer)
+        sort_ind, sort_ind_2 = prepare_data(data, tokenizer, words_num=30)
+
+        words_mask = captions['attention_mask'].cuda()
 
         with torch.no_grad():
             # extract image and text features
-            sent_code, subr_feature, sent_emb, words_emb = clip(**captions, pixel_values = imgs[0])
-            
-            # tensor size
-            nef = subr_feature.shape[2]
-            att_sze = int(math.sqrt(subr_feature.shape[1] - 1))
-            seq_len = words_emb.shape[1]
-            batch_size = words_emb.shape[0]
+            sent_code, subr_feature, sent_emb, words_embs = clip(**captions, pixel_values = imgs[0])
 
-            # transform tensors
-            words_features = subr_feature[:,1:,:].permute(0,2,1).reshape(batch_size, nef, att_sze, att_sze)
-            words_emb = words_emb[:,1:,:].permute(0,2,1)
+            region_features = subr_feature[:,1:,].permute(0,2,1)
+            region_features = subr_feature[:,1:,].permute(0,2,1)                
+            words_embs, words_mask = rm_special_token(words_mask, words_embs) 
+            words_embs = words_embs.permute(0,2,1) # shape of (batch_size, emb, n_words)
+
+            ######################## compute attention map for visualization ############
+            if step <= 0:
+                mask = words_mask.unsqueeze(2)
+                """
+                words_emb(query): batch_size x emb_size x n_words 
+                words_mask: batch_size x n_words x 1
+                region_features(context): batch_size x emb_size x n_patches
+                """
+                batch_size, emb_size, n_words = words_embs.size()
+                batch_size, emb_size, n_patches = region_features.size()
+                assert mask.size() == (batch_size, n_words, 1) # batch_size, 28, 1
+                # compute attnetion scores
+                contextT = torch.transpose(region_features, 1, 2).contiguous()     
+                queryT = torch.transpose(words_embs, 1, 2).contiguous()
+                contextT = l2norm(contextT, dim=2)
+                queryT = l2norm(queryT, dim=2)
+                sim_scores = torch.bmm(queryT, torch.transpose(contextT, 1, 2))
+                assert sim_scores.size() == (batch_size, n_words, n_patches)
+                '''NOT FROM PAPER
+                We should be masking out the similarity scores corresponding to padding tokens.
+                
+                    sim_scores.shape == [batch_size, n_words, n_patches]
+                    words_mask.shape == [batch_size, n_words, 1]
+                '''
+                # masking attention values corresponding to padding token
+                sim_scores = sim_scores.masked_fill_(mask == 0, -1)
+                # applying softmax to sim_scores
+                sm_sim_scores = torch.transpose(sim_scores, 1,2)
+                ################################################################################
+                fig = build_super_images3(epoch, imgs[0].cuda(), captions['input_ids'], sm_sim_scores, tokenizer)
+                fig.savefig('/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/{}_DAMSM_img/attn_img_epoch{}.png'.format(cfg.DATASET_NAME, epoch+1))
+
 
             # calculate loss
-            w_loss0, w_loss1, attn = words_loss(words_features, words_emb, labels,
-                                                cap_lens, class_ids, batch_size)
+            w_loss0, w_loss1, attn = words_loss(region_features, words_embs, labels,
+                                                cap_lens, class_ids, batch_size,
+                                                words_mask, cfg.TRAIN.SMOOTH.GAMMA1, cfg.TRAIN.SMOOTH.GAMMA2, cfg.TRAIN.SMOOTH.GAMMA3)
             w_total_loss += (w_loss0 + w_loss1).data
 
             s_loss0, s_loss1 = \
@@ -252,7 +350,9 @@ class AddLinearOnCLIP(nn.Module):
         self.linear_subr = nn.Linear(768, 512)
     def forward(self, pixel_values, input_ids, attention_mask):
         batch_size = pixel_values.shape[0]
-        outputs = self.backbone(pixel_values = pixel_values, input_ids = input_ids, attention_mask = attention_mask)
+        outputs = self.backbone(pixel_values = pixel_values.cuda(),
+                            input_ids = input_ids.cuda(),
+                            attention_mask = attention_mask.cuda())
         img, subr = outputs['image_embeds'], outputs['vision_model_output']['last_hidden_state']
         sent, words = outputs['text_embeds'], outputs['text_model_output']['last_hidden_state']
         # linear transformation for same embedding dimension -> compute word loss
@@ -271,64 +371,6 @@ def build_models():
         labels = labels.cuda()
 
     return clip, labels, start_epoch, tokenizer
-
-import math
-from torch.optim.lr_scheduler import _LRScheduler
-
-class CosineAnnealingWarmUpRestarts(_LRScheduler):
-    def __init__(self, optimizer, T_0, T_mult=1, eta_max=0.1, T_up=0, gamma=1., last_epoch=-1):
-        if T_0 <= 0 or not isinstance(T_0, int):
-            raise ValueError("Expected positive integer T_0, but got {}".format(T_0))
-        if T_mult < 1 or not isinstance(T_mult, int):
-            raise ValueError("Expected integer T_mult >= 1, but got {}".format(T_mult))
-        if T_up < 0 or not isinstance(T_up, int):
-            raise ValueError("Expected positive integer T_up, but got {}".format(T_up))
-        self.T_0 = T_0
-        self.T_mult = T_mult
-        self.base_eta_max = eta_max
-        self.eta_max = eta_max
-        self.T_up = T_up
-        self.T_i = T_0
-        self.gamma = gamma
-        self.cycle = 0
-        self.T_cur = last_epoch
-        super(CosineAnnealingWarmUpRestarts, self).__init__(optimizer, last_epoch)
-    
-    def get_lr(self):
-        if self.T_cur == -1:
-            return self.base_lrs
-        elif self.T_cur < self.T_up:
-            return [(self.eta_max - base_lr)*self.T_cur / self.T_up + base_lr for base_lr in self.base_lrs]
-        else:
-            return [base_lr + (self.eta_max - base_lr) * (1 + math.cos(math.pi * (self.T_cur-self.T_up) / (self.T_i - self.T_up))) / 2
-                    for base_lr in self.base_lrs]
-
-    def step(self, epoch=None):
-        if epoch is None:
-            epoch = self.last_epoch + 1
-            self.T_cur = self.T_cur + 1
-            if self.T_cur >= self.T_i:
-                self.cycle += 1
-                self.T_cur = self.T_cur - self.T_i
-                self.T_i = (self.T_i - self.T_up) * self.T_mult + self.T_up
-        else:
-            if epoch >= self.T_0:
-                if self.T_mult == 1:
-                    self.T_cur = epoch % self.T_0
-                    self.cycle = epoch // self.T_0
-                else:
-                    n = int(math.log((epoch / self.T_0 * (self.T_mult - 1) + 1), self.T_mult))
-                    self.cycle = n
-                    self.T_cur = epoch - self.T_0 * (self.T_mult ** n - 1) / (self.T_mult - 1)
-                    self.T_i = self.T_0 * self.T_mult ** (n)
-            else:
-                self.T_i = self.T_0
-                self.T_cur = epoch
-                
-        self.eta_max = self.base_eta_max * (self.gamma**self.cycle)
-        self.last_epoch = math.floor(epoch)
-        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
-            param_group['lr'] = lr
 
 
 if __name__ == "__main__":
@@ -356,9 +398,9 @@ if __name__ == "__main__":
     if cfg.CUDA:
         torch.cuda.manual_seed_all(args.manualSeed)
 
-    ##########################################################################
+##########################################################################
 
-    output_dir = '/home/coder/dongjun/CLIP+GAN/DMGAN+CLIP/output/%s_%s/' % \
+    output_dir = './output/%s_%s/' % \
         (cfg.DATASET_NAME, cfg.CONFIG_NAME)
 
     model_dir = os.path.join(output_dir, 'Model')
@@ -369,7 +411,7 @@ if __name__ == "__main__":
     torch.cuda.set_device(cfg.GPU_ID)
     cudnn.benchmark = True
 
-    # Get data loader ##################################################
+    # setting dataloader
     imsize = cfg.TREE.BASE_SIZE * (2 ** (cfg.TREE.BRANCH_NUM-1))
     batch_size = cfg.TRAIN.BATCH_SIZE
     image_transform = transforms.Compose([
@@ -377,8 +419,8 @@ if __name__ == "__main__":
         transforms.RandomCrop(imsize),
         transforms.RandomHorizontalFlip()])
     dataset = TextDataset(cfg.DATA_DIR, 'train',
-                          base_size=cfg.TREE.BASE_SIZE,
-                          transform=image_transform)
+                            base_size=cfg.TREE.BASE_SIZE,
+                            transform=image_transform)
 
     print(dataset.n_words, dataset.embeddings_num)
     assert dataset
@@ -388,18 +430,17 @@ if __name__ == "__main__":
 
     # # validation data #
     dataset_val = TextDataset(cfg.DATA_DIR, 'val',
-                              base_size=cfg.TREE.BASE_SIZE,
-                              transform=image_transform)
+                                base_size=cfg.TREE.BASE_SIZE,
+                                transform=image_transform)
     dataloader_val = torch.utils.data.DataLoader(
         dataset_val, batch_size=batch_size, drop_last=True,
         shuffle=True, num_workers=int(cfg.WORKERS))
-
     # Build model ##############################################################
     clip, labels, start_epoch, tokenizer = build_models()
     backbone_para = list(clip.backbone.parameters())
     linear_subr_para = list(clip.linear_subr.parameters())
     # Train ##############################################################
-    # optimizer = optim.Adam(para, lr=cfg.TRAIN.ENCODER_LR, betas=(0.5, 0.999))
+
     # At any point you can hit Ctrl + C to break out of training early.
     mask = mask_correlated_samples_2(batch_size)
 
@@ -407,47 +448,53 @@ if __name__ == "__main__":
     device = labels.get_device()
     criterion = NT_Xent(batch_size, temperature, mask, device)
 
-
     try:
         # opimizer hyperparams
         backbone_lr = cfg.TRAIN.BACKBONE_LR
         linear_lr = cfg.TRAIN.LINEAR_LR
-        init_lr = cfg.TRAIN.init_lr
-        T_0 = cfg.TRAIN.T_0
-        T_mult = cfg.TRAIN.T_mult
-        T_up = cfg.TRAIN.T_up
-        gamma = cfg.TRAIN.gamma
+        step_size_up = cfg.TRAIN.STEP_SIZE_UP
+        gamma = cfg.TRAIN.GAMMA
         # optimizer
-        backbone_optimizer = optim.AdamW(backbone_para, lr = init_lr, betas = (0.5, 0.999))
-        linear_optimizer = optim.AdamW(linear_subr_para, lr = init_lr, betas = (0.5, 0.999))
+        backbone_optimizer = optim.Adam(backbone_para, lr = backbone_lr, betas = (0.9, 0.98))
+        linear_optimizer = optim.Adam(linear_subr_para, lr = linear_lr, betas = (0.9, 0.98))
         # lr schedule
-        backbone_sched = CosineAnnealingWarmUpRestarts(backbone_optimizer, T_0=T_0, T_mult=T_mult,
-                                                     eta_max=backbone_lr, T_up=T_up, gamma=gamma)
-        linear_sched = CosineAnnealingWarmUpRestarts(linear_optimizer, T_0=T_0, T_mult=T_mult,
-                                                     eta_max=linear_lr, T_up=T_up, gamma=gamma)
+        backbone_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer=backbone_optimizer,
+                                                    pct_start=0.02,
+                                                    max_lr=backbone_lr,
+                                                    anneal_strategy='cos',
+                                                    cycle_momentum=False,
+                                                    steps_per_epoch=len(dataloader),
+                                                    epochs = cfg.TRAIN.MAX_EPOCH)
+        linear_sched = torch.optim.lr_scheduler.OneCycleLR(optimizer=linear_optimizer,
+                                                    pct_start=0.1,
+                                                    max_lr=linear_lr,
+                                                    anneal_strategy='cos',
+                                                    cycle_momentum=False,
+                                                    steps_per_epoch=len(dataloader),
+                                                    epochs = cfg.TRAIN.MAX_EPOCH,
+                                                    div_factor=1e+3,
+                                                    final_div_factor=1e+6)
+
+        # start training
         for epoch in range(start_epoch, cfg.TRAIN.MAX_EPOCH):
             epoch_start_time = time.time()
             count, wsc_loss = train(dataloader, clip,
-                          batch_size, labels, backbone_optimizer, linear_optimizer, epoch,
-                          dataset.ixtoword, image_dir, criterion, tokenizer)
+                            batch_size, labels, backbone_optimizer, linear_optimizer,
+                            epoch, dataset.ixtoword, image_dir, criterion, tokenizer)
             print('-' * 89)
             if len(dataloader_val) > 0:
-                s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion, tokenizer)
+                s_loss, w_loss = evaluate(dataloader_val, clip, batch_size, criterion, tokenizer, epoch, cfg)
                 print('| end epoch {:3d} | valid loss '
-                      '{:5.2f} {:5.2f} | backbone_lr {:.5f}| linear_lr {:.5f}|'
-                      .format(epoch, s_loss, w_loss, backbone_lr, linear_lr))
+                        '{:5.2f} {:5.2f} | backbone_lr {:.8f}| linear_lr {:.5f}|'
+                        .format(epoch, s_loss, w_loss, backbone_sched.get_last_lr()[0], linear_sched.get_last_lr()[0]))
             print('-' * 89)
-            # val_loss logging
-            summary.add_scalar('train_loss/wsc_loss', wsc_loss.item(), epoch)
-            summary.add_scalar('val_loss/w_loss', w_loss, epoch)
-            summary.add_scalar('val_loss/s_loss', s_loss, epoch)
             if (epoch % cfg.TRAIN.SNAPSHOT_INTERVAL == 0 or
                 epoch == cfg.TRAIN.MAX_EPOCH):
                 torch.save(clip.state_dict(),
-                           '%s/clip%d.pth' % (model_dir, epoch))
+                            '%s/clip%d.pth' % (model_dir, epoch))
                 print('Save G/Ds models.')
-            backbone_sched.step()
             linear_sched.step()
+            backbone_sched.step()
     except KeyboardInterrupt:
         print('-' * 89)
         print('Exiting from training early')

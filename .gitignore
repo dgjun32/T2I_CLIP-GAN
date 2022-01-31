@@ -1,5 +1,6 @@
 data/birds/
 data/coco/
+DMGAN+CLIP/code/runs/
 DMGAN+CLIP/data/birds/
 DMGAN+CLIP/data/coco/
 DMGAN+CLIP/output/

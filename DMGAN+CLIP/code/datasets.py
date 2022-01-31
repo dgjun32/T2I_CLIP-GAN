@@ -25,8 +25,9 @@ else:
     import pickle
 
 
-def prepare_data(data, tokenizer):
+def prepare_data(data, tokenizer, words_num):
     imgs, text_captions, captions_lens, class_ids, keys, text_captions_2, captions_lens_2 = data
+
     # sort data by the length in a decreasing order
     sorted_cap_lens, sorted_cap_indices = \
         torch.sort(captions_lens, 0, True)
@@ -39,7 +40,6 @@ def prepare_data(data, tokenizer):
     real_imgs = []
     for i in range(len(imgs)):
         imgs[i] = imgs[i][sorted_cap_indices]
-
         real_imgs.append(Variable(imgs[i]))
         
     real_imgs_2 = []
@@ -48,17 +48,17 @@ def prepare_data(data, tokenizer):
 
         real_imgs_2.append(Variable(imgs_2[i]))
 
-    captions = tokenizer.batch_encode_plus(text_captions, padding = 'max_length', max_length = 77, return_tensors = 'pt')
+    captions = tokenizer.batch_encode_plus(text_captions, padding = 'max_length', max_length=words_num, return_tensors = 'pt', truncation = True)
     captions = {'input_ids' : captions['input_ids'][sorted_cap_indices].squeeze(),
                 'attention_mask' : captions['attention_mask'][sorted_cap_indices].squeeze()}
-    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = 'max_length', max_length = 77, return_tensors = 'pt')
+    captions_2 = tokenizer.batch_encode_plus(text_captions_2, padding = 'max_length', max_length=words_num, return_tensors = 'pt', truncation = True)
     captions_2 = {'input_ids' : captions_2['input_ids'][sorted_cap_indices_2].squeeze(),
                 'attention_mask' : captions_2['attention_mask'][sorted_cap_indices_2].squeeze()}
     # sorted_captions_lens_2 = captions_lens_2[sorted_cap_indices].squeeze()
 
     # captions = torch.cat([captions, captions_2], dim=0)
     # sorted_cap_lens = torch.cat([sorted_cap_lens, sorted_captions_lens_2], dim=0)
-
+    
 
     
     class_ids_1 = class_ids[sorted_cap_indices].numpy()
@@ -71,12 +71,15 @@ def prepare_data(data, tokenizer):
     sorted_cap_lens = Variable(sorted_cap_lens)
     sorted_cap_lens_2 = Variable(sorted_cap_lens_2)
 
-    sorted_cap_indices = sorted_cap_indices
-    sorted_cap_indices_2 = sorted_cap_indices_2      
-  
+    # sorted_cap_indices = sorted_cap_indices
+    # sorted_cap_indices_2 = sorted_cap_indices_2      
+    # real_imgs = torch.stack(real_imgs)
+    # real_imgs_2 = torch.stack(real_imgs_2)
+    # print("real_imgs", real_imgs.size())
 
     return [real_imgs, real_imgs_2, captions, sorted_cap_lens,
             class_ids_1, keys, captions_2, sorted_cap_lens_2, class_ids_2, sorted_cap_indices, sorted_cap_indices_2]
+
 
 
 
